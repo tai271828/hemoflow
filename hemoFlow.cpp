@@ -569,12 +569,11 @@ int main(int argc, char *argv[])
             }
 
             // Add average velocity components
-            T avgVelX = computeAverageVelocityComponent(*lattice, lattice->getBoundingBox(), 0);
-            T avgVelY = computeAverageVelocityComponent(*lattice, lattice->getBoundingBox(), 1);
-            T avgVelZ = computeAverageVelocityComponent(*lattice, lattice->getBoundingBox(), 2);
-            pcout << "Avg Velocity [m/s]: X=" << avgVelX * sim.C_l / sim.C_t
-                  << " Y=" << avgVelY * sim.C_l / sim.C_t
-                  << " Z=" << avgVelZ * sim.C_l / sim.C_t << endl;
+            std::unique_ptr<MultiTensorField3D<T,3>> velocity = computeVelocity(*lattice);
+            Array<T,3> avgVel = computeAverage(*velocity, velocity->getBoundingBox());
+            pcout << "Avg Velocity [m/s]: X=" << avgVel[0] * sim.C_l / sim.C_t
+                  << " Y=" << avgVel[1] * sim.C_l / sim.C_t
+                  << " Z=" << avgVel[2] * sim.C_l / sim.C_t << endl;
 
             for (auto &o : openings)
             {
