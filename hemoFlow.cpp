@@ -577,6 +577,7 @@ int main(int argc, char *argv[])
 
             for (auto &o : openings)
             {
+                // Inlet flow rate SI: 6.43346e-07 scaledVFR:7.33423 with D^3:7742.42
                 pcout << o->getName() << " flow rate SI: " << o->getFlowRate(sim) << " scaledVFR:" << o->getScaledFlowRate() << " with D^3:" << pow(o->getRadius() * 2, 3) << std::endl;
             }
         }
