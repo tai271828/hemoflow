@@ -509,9 +509,7 @@ int main(int argc, char *argv[])
         pcout << endl << "*********** Entering stationary warmup phase ***********" << endl;
 
         int convergenceSteps = 10*max(max(Nx, Ny), Nz);
-        T minDE = 1e-11; T dE = 100; T prevE = 0;
-
-        // imposeOpenings(0.0);
+        T minDE = 1e-10; T dE = 100; T prevE = 0;  // Changed from 1e-11 to 1e-10 for Exercise 2        // imposeOpenings(0.0);
 
         T cE = computeAverageEnergy(*lattice);
         if(isnan(cE)) {
