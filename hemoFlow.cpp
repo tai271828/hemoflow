@@ -48,6 +48,7 @@ string workingFolder;
 T simLength;
 T saveFreqTime;
 T checkpointFreqTime;
+T convergenceTolerance = 1e-10;
 
 // Vector of openings
 vector<OpeningHandler*> openings;
@@ -251,6 +252,17 @@ int main(int argc, char *argv[])
         catch (PlbIOException& exception) {
             pcout << "Warning: checkpointing tag was not found in config, checkpointing will be disabled!" << std::endl;
             useCheckpoint = false;
+        }
+
+        // Read optional convergence tolerance
+        T convergenceTolerance = 1e-11; // Default value
+        try {
+            xml["simulation"]["convergenceTolerance"].read(convergenceTolerance);
+            pcout << "Convergence tolerance set to: " << convergenceTolerance << std::endl;
+        }
+        catch (PlbIOException& exception) {
+            pcout << "Warning: convergenceTolerance tag was not found in config, using default value!" << std::endl;
+            pcout << "Using default convergence tolerance: " << convergenceTolerance << std::endl;
         }
 
         // Loading the input file
@@ -509,7 +521,7 @@ int main(int argc, char *argv[])
         pcout << endl << "*********** Entering stationary warmup phase ***********" << endl;
 
         int convergenceSteps = 10*max(max(Nx, Ny), Nz);
-        T minDE = 1e-10; T dE = 100; T prevE = 0;  // Changed from 1e-11 to 1e-10 for Exercise 2        // imposeOpenings(0.0);
+        T minDE = convergenceTolerance; T dE = 100; T prevE = 0;
 
         T cE = computeAverageEnergy(*lattice);
         if(isnan(cE)) {
