@@ -455,7 +455,30 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
         fprintf(xmf, "     </Attribute>\n");
         fprintf(xmf, "     \n");
 
+        // Geometry Flag (if available)
+        if (num_openings > 0 && gfData != nullptr) {
+            fprintf(xmf, "     <Attribute Name=\"Geometry Flag\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
+            fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"UInt\" Precision=\"2\" Format=\"HDF\">\n", Nz, Ny, Nx);
+            fprintf(xmf, "          %s.h5:/geometryFlag\n", h5_name.c_str());
+            fprintf(xmf, "       </DataItem>\n");
+            fprintf(xmf, "     </Attribute>\n");
+            fprintf(xmf, "     \n");
+        }
+
         fprintf(xmf, "   </Grid>\n");
+
+        // Add opening metadata as Information nodes
+        if (num_openings > 0) {
+            fprintf(xmf, "   <!-- Opening Metadata -->\n");
+            fprintf(xmf, "   <Information Name=\"NumberOfOpenings\" Value=\"%d\"/>\n", num_openings);
+            fprintf(xmf, "   <Information Name=\"OpeningDatasets\">\n");
+            fprintf(xmf, "     <Information Name=\"openingIndex\" Value=\"%s.h5:/openingIndex\"/>\n", h5_name.c_str());
+            fprintf(xmf, "     <Information Name=\"openingRadius\" Value=\"%s.h5:/openingRadius\"/>\n", h5_name.c_str());
+            fprintf(xmf, "     <Information Name=\"openingCenter\" Value=\"%s.h5:/openingCenter\"/>\n", h5_name.c_str());
+            fprintf(xmf, "     <Information Name=\"openingNormal\" Value=\"%s.h5:/openingNormal\"/>\n", h5_name.c_str());
+            fprintf(xmf, "   </Information>\n");
+        }
+
         fprintf(xmf, " </Domain>\n");
 
         /*
