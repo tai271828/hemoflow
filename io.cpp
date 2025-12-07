@@ -18,7 +18,7 @@ int dirExists(const string& pathName)
 
     if( stat( pathName.c_str(), &info ) != 0 )
         return -1; // Cannot acces path
-    else if( info.st_mode & S_IFDIR )  // S_ISDIR() doesn't exist on my windows 
+    else if( info.st_mode & S_IFDIR )  // S_ISDIR() doesn't exist on my windows
         return 1;  // Path exists
     else
         return 0;  // Path does not exist
@@ -94,7 +94,7 @@ void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pli
     vtkOut.writeData<6,float>(*computeShearStress(lattice), "sigma [1/m2s]", 1./(sim.C_l*sim.C_t*sim.C_t));
     vtkOut.writeData<float>(*computeSymmetricTensorNorm(*computeStrainRateFromStress(lattice)), "S_norm [1/s]", 1./sim.C_t );
     // TODO - output viscosity?
-    
+
     if (field1 != nullptr)
        vtkOut.writeData<float>(*field1, "field1");
 }
@@ -102,7 +102,9 @@ void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pli
 // TODO - too slow, optimize the arrays (MPI rank is now saved in every lattice?).
 // TODO - Optimize chunk size.
 // TODO - save as vectors and matrices instead of 3D scalar arrays (also modify xdmf) - https://github.com/BlueBrain/HighFive/blob/master/src/examples/create_dataset_double.cpp
-void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir, MultiNTensorField3D<T> *field1)
+void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir,
+               const vector<OpeningHandler*> &openings, unsigned short* gfData,
+               MultiNTensorField3D<T> *field1)
 {
 
     T SaveTime = T();
@@ -114,7 +116,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     MultiScalarField3D<double> DistributedDensity = *computeDensity(lattice);
     MultiTensorField3D<double,6> DistributedShearStress = *computeShearStress(lattice);
     MultiScalarField3D<double> DistributedS_Norm = *computeSymmetricTensorNorm(*computeStrainRateFromStress(lattice));
-    // MultiScalarField3D<double> DistributedField1 = *field1; // Used for additional fields, e.g. porosity, do any necessary calculations here. 
+    // MultiScalarField3D<double> DistributedField1 = *field1; // Used for additional fields, e.g. porosity, do any necessary calculations here.
 
     // Density/Velocity/... shared the same atomic block distribution!
     MultiBlockManagement3D VelocityBlockManagement = DistributedVelocity.getMultiBlockManagement();
@@ -145,7 +147,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
         for(unsigned int i = LocalBulk.getBulk().x0; i <= LocalBulk.getBulk().x1; i++)
             for(unsigned int j = LocalBulk.getBulk().y0; j <= LocalBulk.getBulk().y1; j++)
                 for(unsigned int k = LocalBulk.getBulk().z0; k <= LocalBulk.getBulk().z1; k++){
-                    
+
                     // Now we convert the global scale coordinates to block local coordinates
                     unsigned int LocalX = LocalBulk.toLocalX(i);
                     unsigned int LocalY = LocalBulk.toLocalY(j);
@@ -173,11 +175,11 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
                     // Additional field - No unit conversion!
                     if (field1 != nullptr) {
                         double foundField1 = *field1->getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                        Field1.push_back(foundField1); 
+                        Field1.push_back(foundField1);
                     }
                     else {
                         Field1.push_back(0.0);
-                    }    
+                    }
                     // Rank of current mpi thread
                     this_rank.push_back(RankID);
 
@@ -191,10 +193,10 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
 
     ///////////////////////////// Saving HDF5 /////////////////////////////
 
-    // Now save the partial local data to hdf5, if you dont understand, 
+    // Now save the partial local data to hdf5, if you dont understand,
     // check (https://github.com/BlueBrain/HighFive/blob/master/src/examples/parallel_hdf5_collective_io.cpp)
     using namespace HighFive;
-    
+
     FileAccessProps fapl;
     // Tell HDF5 to use MPI-IO
     fapl.add(MPIOFileAccess{MPI_COMM_WORLD, MPI_INFO_NULL});
@@ -233,7 +235,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     DataSet S_Norm = file.createDataSet<float>("S_norm", DataSpace(Dims), props);
     // Field1
     DataSet Field1_data = file.createDataSet<float>("Field1", DataSpace(Dims), props);
-    
+
     // MPI rank
     DataSet Rank = file.createDataSet<int>("MPI_rank", DataSpace(Dims), props);
 
@@ -259,6 +261,74 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     Field1_data.select(ElementSet(GlobalID)).write(Field1, xfer_props);
     // MPI Rank
     Rank.select(ElementSet(GlobalID)).write(this_rank, xfer_props);
+
+    // Write opening metadata (only from main processor)
+    if (global::mpi().isMainProcessor()) {
+        // Opening indices (labels)
+        std::vector<unsigned short> opening_indices;
+        std::vector<double> opening_radii;
+        std::vector<std::vector<double>> opening_centers;  // 2D: [[x0,y0,z0], [x1,y1,z1], ...]
+        std::vector<std::vector<double>> opening_normals;  // 2D: [[nx0,ny0,nz0], [nx1,ny1,nz1], ...]
+
+        for (const auto &o : openings) {
+            opening_indices.push_back(o->getGeometryLabel());
+            opening_radii.push_back(o->getRadius() * sim.C_l);  // Convert to physical units
+
+            // Get center and normal from opening
+            vec3d center = o->getCenter();
+            vec3d normal = o->getDirection();
+
+            // Store center (in voxel coordinates)
+            opening_centers.push_back({center.x, center.y, center.z});
+
+            // Store normal (unit vector)
+            opening_normals.push_back({normal.x, normal.y, normal.z});
+        }
+
+        int num_openings = openings.size();
+
+        // Create datasets for opening metadata
+        if (num_openings > 0) {
+            DataSet ds_indices = file.createDataSet<unsigned short>("openingIndex",
+                DataSpace({(size_t)num_openings}));
+            ds_indices.write(opening_indices);
+
+            DataSet ds_radii = file.createDataSet<double>("openingRadius",
+                DataSpace({(size_t)num_openings}));
+            ds_radii.write(opening_radii);
+
+            DataSet ds_centers = file.createDataSet<double>("openingCenter",
+                DataSpace({(size_t)num_openings, 3}));
+            ds_centers.write(opening_centers);
+
+            DataSet ds_normals = file.createDataSet<double>("openingNormal",
+                DataSpace({(size_t)num_openings, 3}));
+            ds_normals.write(opening_normals);
+
+            // Write geometry flag if available
+            if (gfData != nullptr) {
+                std::vector<size_t> geom_dims{(size_t)Nx, (size_t)Ny, (size_t)Nz};
+                DataSet ds_geom = file.createDataSet<unsigned short>("geometryFlag",
+                    DataSpace(geom_dims));
+
+                // Copy geometry data into 3D structure
+                std::vector<std::vector<std::vector<unsigned short>>> geom_data(Nx,
+                    std::vector<std::vector<unsigned short>>(Ny, std::vector<unsigned short>(Nz)));
+                
+                for (int i = 0; i < Nx; i++) {
+                    for (int j = 0; j < Ny; j++) {
+                        for (int k = 0; k < Nz; k++) {
+                            geom_data[i][j][k] = gfData[i * Ny * Nz + j * Nz + k];
+                        }
+                    }
+                }
+                ds_geom.write(geom_data);
+            }
+
+            // Write dx as attribute
+            file.createAttribute<double>("dx", DataSpace::From(sim.C_l)).write(sim.C_l);
+        }
+    }
 
     global::mpi().barrier();
 
@@ -416,7 +486,7 @@ void writeNPZ(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, plint iter)
     if(global::mpi().isMainProcessor()) {
         double *data = new double[3*nx*ny*nz];
 
-        for(unsigned int i = 0; i < nx; i++) 
+        for(unsigned int i = 0; i < nx; i++)
             for(unsigned int j = 0; j < ny; j++)
                 for(unsigned int k = 0; k < nz; k++) {
                 int idx = (i*nx*nz+j*nz+k)*3;
@@ -426,7 +496,7 @@ void writeNPZ(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, plint iter)
                 data[idx+2] = localVelocity.get(i, j, k)[2];
             }
 
-        cnpy::npz_save(createFileName("output_", iter, 6) + ".npz", "velocity",&data[0],{3,nz,ny,nx},"w"); 
+        cnpy::npz_save(createFileName("output_", iter, 6) + ".npz", "velocity",&data[0],{3,nz,ny,nx},"w");
     }
 
     global::mpi().barrier();

@@ -3,6 +3,7 @@
 
 #include "globals.h"
 #include "helper.h"
+#include "opening.h"
 
 // For directory manipulations
 #include <unistd.h>
@@ -25,7 +26,9 @@ int do_mkdir(const char *path, mode_t mode);
 int mkpath(const char *path, mode_t mode);
 
 void writeNPZ(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, plint iter);  // Note: this output type does not do unit conversion.
-void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir, MultiNTensorField3D<T> *field1 = nullptr);
+void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir,
+               const vector<OpeningHandler*> &openings, unsigned short* gfData,
+               MultiNTensorField3D<T> *field1 = nullptr);
 void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, MultiNTensorField3D<T> *field1 = nullptr);
 
 

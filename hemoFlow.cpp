@@ -533,7 +533,7 @@ int main(int argc, char *argv[])
             pcout << "Energy at the initial state: "<< cE << endl;
             pcout << "Saving initial state with flow diverter..." << endl;
             // writeVTK(*lattice, sim, -1, porosityField);
-            writeHDF5(*lattice, sim, -1, outDir, porosityField);
+            writeHDF5(*lattice, sim, -1, outDir, openings, gfData, porosityField);
         }
 
         while(abs(dE) > minDE && stat_cycle < convergenceSteps )
@@ -556,7 +556,7 @@ int main(int argc, char *argv[])
         pcout << "Saving time step 0..." << endl;
         // writeVTK(*lattice, 0);
         // writeNPZ(*lattice, 0);
-        writeHDF5(*lattice, sim, 0, outDir);
+        writeHDF5(*lattice, sim, 0, outDir, openings, gfData, porosityField);
 
         // Set the counter back
         stat_cycle = 0;
@@ -574,7 +574,7 @@ int main(int argc, char *argv[])
             // Capture numerical divergence if appears
             if (std::isnan(cE)){
                 pcout << "ERROR: NaN average energy! Saving state and stopping simulation" << std::endl;
-                writeHDF5(*lattice, sim, stat_cycle, outDir, porosityField);
+                writeHDF5(*lattice, sim, stat_cycle, outDir, openings, gfData, porosityField);
                 return 0;
             }
 
@@ -606,7 +606,7 @@ int main(int argc, char *argv[])
             pcout << "Writing output at: " << stat_cycle << " (" << stat_cycle*sim.C_t << " s)." << endl;
             // writeVTK(*lattice, sim, stat_cycle);
             // writeNPZ(*lattice, sim, stat_cycle);
-            writeHDF5(*lattice, sim, stat_cycle, outDir, porosityField);
+            writeHDF5(*lattice, sim, stat_cycle, outDir, openings, gfData, porosityField);
         }
 
         if(useCheckpoint && (stat_cycle % checkpointFrequency == 0)) {
