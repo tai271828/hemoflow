@@ -262,14 +262,14 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     // MPI Rank
     Rank.select(ElementSet(GlobalID)).write(this_rank, xfer_props);
 
-    // Write opening metadata (only from main processor)
-    if (global::mpi().isMainProcessor()) {
-        // Opening indices (labels)
-        std::vector<unsigned short> opening_indices;
-        std::vector<double> opening_radii;
-        std::vector<std::vector<double>> opening_centers;  // 2D: [[x0,y0,z0], [x1,y1,z1], ...]
-        std::vector<std::vector<double>> opening_normals;  // 2D: [[nx0,ny0,nz0], [nx1,ny1,nz1], ...]
+    // Write opening metadata (all processes must participate in collective operations)
+    // Prepare data on main processor
+    std::vector<unsigned short> opening_indices;
+    std::vector<double> opening_radii;
+    std::vector<std::vector<double>> opening_centers;  // 2D: [[x0,y0,z0], [x1,y1,z1], ...]
+    std::vector<std::vector<double>> opening_normals;  // 2D: [[nx0,ny0,nz0], [nx1,ny1,nz1], ...]
 
+    if (global::mpi().isMainProcessor()) {
         for (const auto &o : openings) {
             opening_indices.push_back(o->getGeometryLabel());
             opening_radii.push_back(o->getRadius() * sim.C_l);  // Convert to physical units
@@ -284,38 +284,47 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
             // Store normal (unit vector)
             opening_normals.push_back({normal.x, normal.y, normal.z});
         }
+    }
 
-        int num_openings = openings.size();
+    int num_openings = openings.size();
 
-        // Create datasets for opening metadata
-        if (num_openings > 0) {
-            DataSet ds_indices = file.createDataSet<unsigned short>("openingIndex",
-                DataSpace({(size_t)num_openings}));
+    // Create datasets for opening metadata - ALL processes participate
+    if (num_openings > 0) {
+        // Use independent I/O for metadata (no xfer_props)
+        DataSet ds_indices = file.createDataSet<unsigned short>("openingIndex",
+            DataSpace({(size_t)num_openings}));
+
+        DataSet ds_radii = file.createDataSet<double>("openingRadius",
+            DataSpace({(size_t)num_openings}));
+
+        DataSet ds_centers = file.createDataSet<double>("openingCenter",
+            DataSpace({(size_t)num_openings, 3}));
+
+        DataSet ds_normals = file.createDataSet<double>("openingNormal",
+            DataSpace({(size_t)num_openings, 3}));
+
+        // Only main processor writes the data
+        if (global::mpi().isMainProcessor()) {
             ds_indices.write(opening_indices);
-
-            DataSet ds_radii = file.createDataSet<double>("openingRadius",
-                DataSpace({(size_t)num_openings}));
             ds_radii.write(opening_radii);
-
-            DataSet ds_centers = file.createDataSet<double>("openingCenter",
-                DataSpace({(size_t)num_openings, 3}));
             ds_centers.write(opening_centers);
-
-            DataSet ds_normals = file.createDataSet<double>("openingNormal",
-                DataSpace({(size_t)num_openings, 3}));
             ds_normals.write(opening_normals);
+        }
 
-            // Write geometry flag if available
-            if (gfData != nullptr) {
-                std::vector<size_t> geom_dims{(size_t)Nx, (size_t)Ny, (size_t)Nz};
-                DataSet ds_geom = file.createDataSet<unsigned short>("geometryFlag",
-                    DataSpace(geom_dims));
+        // Write geometry flag if available - ALL processes create dataset
+        if (gfData != nullptr) {
+            std::vector<size_t> geom_dims{(size_t)Nx, (size_t)Ny, (size_t)Nz};
+            DataSet ds_geom = file.createDataSet<unsigned short>("geometryFlag",
+                DataSpace(geom_dims));
 
-                // Write directly from raw pointer (much faster than nested vector copy)
+            // Only main processor writes
+            if (global::mpi().isMainProcessor()) {
                 ds_geom.write_raw(gfData);
             }
+        }
 
-            // Write dx as attribute
+        // Write dx as attribute - only main processor
+        if (global::mpi().isMainProcessor()) {
             file.createAttribute<double>("dx", DataSpace::From(sim.C_l)).write(sim.C_l);
         }
     }
