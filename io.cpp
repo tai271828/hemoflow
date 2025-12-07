@@ -262,34 +262,47 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     // MPI Rank
     Rank.select(ElementSet(GlobalID)).write(this_rank, xfer_props);
 
-    // Write opening metadata (all processes must participate in collective operations)
-    // Prepare data on main processor
-    std::vector<unsigned short> opening_indices;
-    std::vector<double> opening_radii;
-    std::vector<std::vector<double>> opening_centers;  // 2D: [[x0,y0,z0], [x1,y1,z1], ...]
-    std::vector<std::vector<double>> opening_normals;  // 2D: [[nx0,ny0,nz0], [nx1,ny1,nz1], ...]
+    // Write geometry flag if available - ALL processes create dataset
+    // This is independent of opening metadata
+    if (gfData != nullptr) {
+        std::vector<size_t> geom_dims{(size_t)Nx, (size_t)Ny, (size_t)Nz};
+        DataSet ds_geom = file.createDataSet<unsigned short>("geometryFlag",
+            DataSpace(geom_dims));
 
-    if (global::mpi().isMainProcessor()) {
-        for (const auto &o : openings) {
-            opening_indices.push_back(o->getGeometryLabel());
-            opening_radii.push_back(o->getRadius() * sim.C_l);  // Convert to physical units
-
-            // Get center and normal from opening
-            vec3d center = o->getCenter();
-            vec3d normal = o->getDirection();
-
-            // Store center (in voxel coordinates)
-            opening_centers.push_back({center.x, center.y, center.z});
-
-            // Store normal (unit vector)
-            opening_normals.push_back({normal.x, normal.y, normal.z});
+        // Only main processor writes
+        if (global::mpi().isMainProcessor()) {
+            ds_geom.write_raw(gfData);
         }
     }
 
+    // Write opening metadata (all processes must participate in collective operations)
+    // Prepare data on main processor
     int num_openings = openings.size();
 
-    // Create datasets for opening metadata - ALL processes participate
     if (num_openings > 0) {
+        std::vector<unsigned short> opening_indices;
+        std::vector<double> opening_radii;
+        std::vector<std::vector<double>> opening_centers;  // 2D: [[x0,y0,z0], [x1,y1,z1], ...]
+        std::vector<std::vector<double>> opening_normals;  // 2D: [[nx0,ny0,nz0], [nx1,ny1,nz1], ...]
+
+        if (global::mpi().isMainProcessor()) {
+            for (const auto &o : openings) {
+                opening_indices.push_back(o->getGeometryLabel());
+                opening_radii.push_back(o->getRadius() * sim.C_l);  // Convert to physical units
+
+                // Get center and normal from opening
+                vec3d center = o->getCenter();
+                vec3d normal = o->getDirection();
+
+                // Store center (in voxel coordinates)
+                opening_centers.push_back({center.x, center.y, center.z});
+
+                // Store normal (unit vector)
+                opening_normals.push_back({normal.x, normal.y, normal.z});
+            }
+        }
+
+        // Create datasets for opening metadata - ALL processes participate
         // Use independent I/O for metadata (no xfer_props)
         DataSet ds_indices = file.createDataSet<unsigned short>("openingIndex",
             DataSpace({(size_t)num_openings}));
@@ -309,18 +322,6 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
             ds_radii.write(opening_radii);
             ds_centers.write(opening_centers);
             ds_normals.write(opening_normals);
-        }
-
-        // Write geometry flag if available - ALL processes create dataset
-        if (gfData != nullptr) {
-            std::vector<size_t> geom_dims{(size_t)Nx, (size_t)Ny, (size_t)Nz};
-            DataSet ds_geom = file.createDataSet<unsigned short>("geometryFlag",
-                DataSpace(geom_dims));
-
-            // Only main processor writes
-            if (global::mpi().isMainProcessor()) {
-                ds_geom.write_raw(gfData);
-            }
         }
 
         // Write dx as attribute - only main processor
@@ -455,8 +456,8 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
         fprintf(xmf, "     </Attribute>\n");
         fprintf(xmf, "     \n");
 
-        // Geometry Flag (if available)
-        if (num_openings > 0 && gfData != nullptr) {
+        // Geometry Flag (if available) - independent of opening metadata
+        if (gfData != nullptr) {
             fprintf(xmf, "     <Attribute Name=\"Geometry Flag\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
             fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"UInt\" Precision=\"2\" Format=\"HDF\">\n", Nz, Ny, Nx);
             fprintf(xmf, "          %s.h5:/geometryFlag\n", h5_name.c_str());
@@ -467,7 +468,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
 
         fprintf(xmf, "   </Grid>\n");
 
-        // Add opening metadata as Information nodes
+        // Add opening metadata as Information nodes (only if we have openings)
         if (num_openings > 0) {
             fprintf(xmf, "   <!-- Opening Metadata -->\n");
             fprintf(xmf, "   <Information Name=\"NumberOfOpenings\" Value=\"%d\"/>\n", num_openings);
