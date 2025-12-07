@@ -311,18 +311,8 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
                 DataSet ds_geom = file.createDataSet<unsigned short>("geometryFlag",
                     DataSpace(geom_dims));
 
-                // Copy geometry data into 3D structure
-                std::vector<std::vector<std::vector<unsigned short>>> geom_data(Nx,
-                    std::vector<std::vector<unsigned short>>(Ny, std::vector<unsigned short>(Nz)));
-                
-                for (int i = 0; i < Nx; i++) {
-                    for (int j = 0; j < Ny; j++) {
-                        for (int k = 0; k < Nz; k++) {
-                            geom_data[i][j][k] = gfData[i * Ny * Nz + j * Nz + k];
-                        }
-                    }
-                }
-                ds_geom.write(geom_data);
+                // Write directly from raw pointer (much faster than nested vector copy)
+                ds_geom.write_raw(gfData);
             }
 
             // Write dx as attribute
