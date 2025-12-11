@@ -10,9 +10,10 @@ PALABOS_ROOT = ./palabos
 PALABOS_INCLUDE = -I$(PALABOS_ROOT)/src -I$(PALABOS_ROOT)/externalLibraries
 PALABOS_LIB = ./build/libpalabos.a
 
-# HDF5 settings
-HDF5_INCLUDE = -I/usr/include/hdf5/openmpi
-HDF5_LIB = -L/usr/lib/x86_64-linux-gnu/hdf5/openmpi -lhdf5 -lhdf5_hl
+# HDF5 settings (customize HDF5_ROOT if needed)
+HDF5_ROOT ?= $(HOME)/work-my-projects/workspace-hemoflow/hdf5-installation
+HDF5_INCLUDE = -I$(HDF5_ROOT)/include
+HDF5_LIB = -L$(HDF5_ROOT)/lib -lhdf5 -lhdf5_hl
 
 # HighFive header-only library
 HIGHFIVE_INCLUDE = -I./external/HighFive/include
