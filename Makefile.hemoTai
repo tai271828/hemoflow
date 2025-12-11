@@ -14,13 +14,14 @@ PALABOS_LIB = ./build/libpalabos.a
 HDF5_ROOT ?= $(HOME)/work-my-projects/workspace-hemoflow/hdf5-installation
 HDF5_INCLUDE = -I$(HDF5_ROOT)/include
 HDF5_LIB = -L$(HDF5_ROOT)/lib -lhdf5 -lhdf5_hl
+HDF5_RPATH = -Wl,-rpath,$(HDF5_ROOT)/lib
 
 # HighFive header-only library
 HIGHFIVE_INCLUDE = -I./external/HighFive/include
 
 # Combined includes and libs
 INCLUDES = $(PALABOS_INCLUDE) $(HDF5_INCLUDE) $(HIGHFIVE_INCLUDE)
-LIBS = $(PALABOS_LIB) $(HDF5_LIB) -lz
+LIBS = $(PALABOS_LIB) $(HDF5_LIB) $(HDF5_RPATH) -lz
 
 # Target
 TARGET = hemoTai
@@ -51,6 +52,10 @@ clean:
 run:
 	mpirun -np 4 ./$(TARGET)
 
+# Run with explicit LD_LIBRARY_PATH (alternative if rpath doesn't work)
+run-ldpath:
+	LD_LIBRARY_PATH=$(HDF5_ROOT)/lib:$$LD_LIBRARY_PATH mpirun -np 4 ./$(TARGET)
+
 # Run with restart from checkpoint
 run-restart:
 	mpirun -np 4 ./$(TARGET) -r
@@ -63,6 +68,7 @@ help:
 	@echo "  all          - Build the executable (default)"
 	@echo "  clean        - Remove build artifacts and output"
 	@echo "  run          - Run with 4 MPI processes"
+	@echo "  run-ldpath   - Run with explicit LD_LIBRARY_PATH"
 	@echo "  run-restart  - Run with restart from checkpoint"
 	@echo "  help         - Show this help"
 	@echo ""
@@ -73,7 +79,10 @@ help:
 	@echo ""
 	@echo "Adjust paths in Makefile to match your system:"
 	@echo "  - PALABOS_ROOT: Path to Palabos library"
-	@echo "  - HDF5_INCLUDE/HDF5_LIB: HDF5 library paths"
+	@echo "  - HDF5_ROOT: HDF5 installation root (default: \$$HOME/work-my-projects/workspace-hemoflow/hdf5-installation)"
 	@echo "  - HIGHFIVE_INCLUDE: HighFive header path"
+	@echo ""
+	@echo "Note: If you get 'libhdf5.so cannot open shared object' errors,"
+	@echo "      rebuild with 'make clean && make' to embed rpath, or use 'make run-ldpath'"
 
-.PHONY: all clean run run-restart help
+.PHONY: all clean run run-ldpath run-restart help
