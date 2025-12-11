@@ -1,0 +1,31 @@
+<simulation>
+	<dt>1e-4</dt>	<!-- Desired time step size [s]. -->
+	<blockSize>20</blockSize>	<!-- Target atomic block size for domain decomposition. -->
+	<outputDir>output_simple_tube</outputDir> <!-- Where to put the output files. -->
+	<simLength>0.05</simLength> <!-- [s] - Short simulation for fast testing -->
+	<saveFrequency>0.01</saveFrequency> <!-- [s] - Save every 0.01s -->
+	<checkpointFrequency>0.02</checkpointFrequency> <!-- [s] - Checkpoint frequency -->
+</simulation>
+
+<geometry>
+	<file>./input/simple_tube.npz</file> <!-- Simple tube geometry -->
+
+	<!-- Opening types: 1 - Velocity; 2 - Murray (velocity); 3- Pressure; 4 - Freeflow -->
+
+	<opening_0>
+		<name>Inlet</name>
+		<type>1</type> <!-- Velocity inlet -->
+		<label>10</label>
+		<timeScaleFunction></timeScaleFunction>  <!-- No time scaling, constant flow -->
+		<parameter>0.1</parameter> <!-- [m/s] - Simple constant velocity -->
+	</opening_0>
+
+	<opening_1>
+		<name>Outlet</name>
+		<type>3</type> <!-- Pressure outlet -->
+		<label>11</label>
+		<timeScaleFunction></timeScaleFunction>
+		<parameter>0</parameter> <!-- [Pa] - Zero gauge pressure -->
+	</opening_1>
+
+</geometry>
