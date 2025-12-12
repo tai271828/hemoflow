@@ -2,8 +2,8 @@
 	<dt>1e-4</dt>	<!-- Desired time step size [s]. This defines the balance between accuracy and computational cost. -->
 	<blockSize>30</blockSize>	<!-- Target atomic block size for domain decomposition. (Side length, LB nodes) -->
 	<outputDir>output_simple_tube</outputDir> <!-- Where to put the output files. Relative to this config file.-->
-	<simLength>0.1</simLength> <!-- [s] - Short simulation for testing -->
-	<saveFrequency>0.02</saveFrequency> <!-- [s] -->
+	<simLength>0.8</simLength> <!-- [s] - Short simulation for testing -->
+	<saveFrequency>0.016</saveFrequency> <!-- [s] -->
 </simulation>
 
 <geometry>
