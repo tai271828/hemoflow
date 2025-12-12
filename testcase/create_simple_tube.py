@@ -6,7 +6,7 @@ This creates a small, fast-to-simulate geometry.
 import numpy as np
 
 # Tube dimensions (in voxels)
-length = 100  # z-direction
+length = 1000  # z-direction
 radius = 10   # tube radius
 
 # Grid dimensions
