@@ -1,0 +1,43 @@
+<simulation>
+	<dt>1e-4</dt>	<!-- Desired time step size [s]. This defines the balance between accuracy and computational cost. -->
+	<blockSize>30</blockSize>	<!-- Target atomic block size for domain decomposition. (Side length, LB nodes) -->
+	<outputDir>output_simple_tube</outputDir> <!-- Where to put the output files. Relative to this config file.-->
+	<simLength>0.1</simLength> <!-- [s] - Short simulation for testing -->
+	<saveFrequency>0.02</saveFrequency> <!-- [s] -->
+</simulation>
+
+<geometry>
+	<file>./input/simple_tube_small.npz</file> <!-- Simple tube geometry with 3 openings -->
+
+	<!-- Opening types: 1 - Velocity; 2 - Murray (velocity); 3- Pressure; 4 - Freeflow -->
+	<!-- Create a separate tag for every opening. -->
+	<opening_0>
+		<name>Inlet</name>
+		<type>1</type>
+		<label>10</label>
+		<timeScaleFunction>./input/cerebral_flowrate.txt</timeScaleFunction>  <!-- Scale function for this opening. -->
+		<parameter>0.1</parameter> <!-- [m/s] - Lower velocity for simple tube -->
+	</opening_0>
+
+	<opening_1>
+		<name>Outlet Main</name>
+		<type>4</type>
+		<label>11</label>
+		<timeScaleFunction></timeScaleFunction>  <!-- Scale function for this opening. -->
+		<parameter></parameter> <!-- Freeflow boundary -->
+	</opening_1>
+
+	<opening_2>
+		<name>Outlet Side</name>
+		<type>3</type>
+		<label>12</label>
+		<timeScaleFunction></timeScaleFunction>
+		<parameter>0</parameter> <!-- [Pa] - Pressure boundary -->
+	</opening_2>
+
+</geometry>
+
+<flowdiverter>
+	<linCoeff>100</linCoeff>
+	<quadCoeff>200</quadCoeff>
+</flowdiverter>
