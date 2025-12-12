@@ -1,4 +1,5 @@
 #include "io.h"
+#include "opening.h"
 
 // ***********************************
 // *** Directory handling routines ***
@@ -18,7 +19,7 @@ int dirExists(const string& pathName)
 
     if( stat( pathName.c_str(), &info ) != 0 )
         return -1; // Cannot acces path
-    else if( info.st_mode & S_IFDIR )  // S_ISDIR() doesn't exist on my windows 
+    else if( info.st_mode & S_IFDIR )  // S_ISDIR() doesn't exist on my windows
         return 1;  // Path exists
     else
         return 0;  // Path does not exist
@@ -94,7 +95,7 @@ void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pli
     vtkOut.writeData<6,float>(*computeShearStress(lattice), "sigma [1/m2s]", 1./(sim.C_l*sim.C_t*sim.C_t));
     vtkOut.writeData<float>(*computeSymmetricTensorNorm(*computeStrainRateFromStress(lattice)), "S_norm [1/s]", 1./sim.C_t );
     // TODO - output viscosity?
-    
+
     if (field1 != nullptr)
        vtkOut.writeData<float>(*field1, "field1");
 }
@@ -102,7 +103,7 @@ void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pli
 // TODO - too slow, optimize the arrays (MPI rank is now saved in every lattice?).
 // TODO - Optimize chunk size.
 // TODO - save as vectors and matrices instead of 3D scalar arrays (also modify xdmf) - https://github.com/BlueBrain/HighFive/blob/master/src/examples/create_dataset_double.cpp
-void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir, MultiNTensorField3D<T> *field1)
+void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir, vector<OpeningHandler*> *openings, MultiNTensorField3D<T> *field1)
 {
 
     T SaveTime = T();
@@ -114,7 +115,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     MultiScalarField3D<double> DistributedDensity = *computeDensity(lattice);
     MultiTensorField3D<double,6> DistributedShearStress = *computeShearStress(lattice);
     MultiScalarField3D<double> DistributedS_Norm = *computeSymmetricTensorNorm(*computeStrainRateFromStress(lattice));
-    // MultiScalarField3D<double> DistributedField1 = *field1; // Used for additional fields, e.g. porosity, do any necessary calculations here. 
+    // MultiScalarField3D<double> DistributedField1 = *field1; // Used for additional fields, e.g. porosity, do any necessary calculations here.
 
     // Density/Velocity/... shared the same atomic block distribution!
     MultiBlockManagement3D VelocityBlockManagement = DistributedVelocity.getMultiBlockManagement();
@@ -133,9 +134,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     vector<float> Field1;
     vector<int> this_rank;
 
-    int RankID = global::mpi().getRank();
-
-    // Now we loop through all local blocks on current MPI thread
+    int RankID = global::mpi().getRank();    // Now we loop through all local blocks on current MPI thread
     for(long blockId : LocalBlockIDs) {
         // The "SmartBulk3D" object represents local atomic block in a global view, i.e. its bounding box coordinates are in global scale.
         // If you do not understand, go check the source codes of "MultiBlockManagement3D::findAllLocalRepresentations()"
@@ -145,7 +144,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
         for(unsigned int i = LocalBulk.getBulk().x0; i <= LocalBulk.getBulk().x1; i++)
             for(unsigned int j = LocalBulk.getBulk().y0; j <= LocalBulk.getBulk().y1; j++)
                 for(unsigned int k = LocalBulk.getBulk().z0; k <= LocalBulk.getBulk().z1; k++){
-                    
+
                     // Now we convert the global scale coordinates to block local coordinates
                     unsigned int LocalX = LocalBulk.toLocalX(i);
                     unsigned int LocalY = LocalBulk.toLocalY(j);
@@ -173,11 +172,11 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
                     // Additional field - No unit conversion!
                     if (field1 != nullptr) {
                         double foundField1 = *field1->getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                        Field1.push_back(foundField1); 
+                        Field1.push_back(foundField1);
                     }
                     else {
                         Field1.push_back(0.0);
-                    }    
+                    }
                     // Rank of current mpi thread
                     this_rank.push_back(RankID);
 
@@ -191,10 +190,10 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
 
     ///////////////////////////// Saving HDF5 /////////////////////////////
 
-    // Now save the partial local data to hdf5, if you dont understand, 
+    // Now save the partial local data to hdf5, if you dont understand,
     // check (https://github.com/BlueBrain/HighFive/blob/master/src/examples/parallel_hdf5_collective_io.cpp)
     using namespace HighFive;
-    
+
     FileAccessProps fapl;
     // Tell HDF5 to use MPI-IO
     fapl.add(MPIOFileAccess{MPI_COMM_WORLD, MPI_INFO_NULL});
@@ -233,9 +232,19 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     DataSet S_Norm = file.createDataSet<float>("S_norm", DataSpace(Dims), props);
     // Field1
     DataSet Field1_data = file.createDataSet<float>("Field1", DataSpace(Dims), props);
-    
+
     // MPI rank
     DataSet Rank = file.createDataSet<int>("MPI_rank", DataSpace(Dims), props);
+
+    // Opening center
+    DataSet opening_center_x = file.createDataSet<float>("opening_center_x", DataSpace(Dims), props);
+    DataSet opening_center_y = file.createDataSet<float>("opening_center_y", DataSpace(Dims), props);
+    DataSet opening_center_z = file.createDataSet<float>("opening_center_z", DataSpace(Dims), props);
+
+    // Opening direction
+    DataSet opening_direction_x = file.createDataSet<float>("opening_direction_x", DataSpace(Dims), props);
+    DataSet opening_direction_y = file.createDataSet<float>("opening_direction_y", DataSpace(Dims), props);
+    DataSet opening_direction_z = file.createDataSet<float>("opening_direction_z", DataSpace(Dims), props);
 
     auto xfer_props = DataTransferProps{};
     xfer_props.add(UseCollectiveIO{});
@@ -259,6 +268,41 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     Field1_data.select(ElementSet(GlobalID)).write(Field1, xfer_props);
     // MPI Rank
     Rank.select(ElementSet(GlobalID)).write(this_rank, xfer_props);
+
+    global::mpi().barrier();
+
+    // Save opening metadata (only on rank 0 to avoid duplicate writes)
+    if (openings != nullptr && global::mpi().isMainProcessor()) {
+        size_t num_openings = openings->size();
+        if (num_openings > 0) {
+            std::vector<float> opening_center_x, opening_center_y, opening_center_z;
+            std::vector<float> opening_direction_x, opening_direction_y, opening_direction_z;
+
+            for (auto &opening : *openings) {
+                vec3d center = opening->getCenter();
+                vec3d direction = opening->getDirection();
+
+                // Convert center to physical units [m]
+                opening_center_x.push_back(float(center.x * sim.C_l));
+                opening_center_y.push_back(float(center.y * sim.C_l));
+                opening_center_z.push_back(float(center.z * sim.C_l));
+
+                // Direction is already normalized (no unit conversion)
+                opening_direction_x.push_back(float(direction.x));
+                opening_direction_y.push_back(float(direction.y));
+                opening_direction_z.push_back(float(direction.z));
+            }
+
+            // Create datasets for opening metadata
+            std::vector<size_t> opening_dims{num_openings};
+            file.createDataSet<float>("opening_center_x", DataSpace(opening_dims)).write(opening_center_x);
+            file.createDataSet<float>("opening_center_y", DataSpace(opening_dims)).write(opening_center_y);
+            file.createDataSet<float>("opening_center_z", DataSpace(opening_dims)).write(opening_center_z);
+            file.createDataSet<float>("opening_direction_x", DataSpace(opening_dims)).write(opening_direction_x);
+            file.createDataSet<float>("opening_direction_y", DataSpace(opening_dims)).write(opening_direction_y);
+            file.createDataSet<float>("opening_direction_z", DataSpace(opening_dims)).write(opening_direction_z);
+        }
+    }
 
     global::mpi().barrier();
 
@@ -416,7 +460,7 @@ void writeNPZ(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, plint iter)
     if(global::mpi().isMainProcessor()) {
         double *data = new double[3*nx*ny*nz];
 
-        for(unsigned int i = 0; i < nx; i++) 
+        for(unsigned int i = 0; i < nx; i++)
             for(unsigned int j = 0; j < ny; j++)
                 for(unsigned int k = 0; k < nz; k++) {
                 int idx = (i*nx*nz+j*nz+k)*3;
@@ -426,7 +470,7 @@ void writeNPZ(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, plint iter)
                 data[idx+2] = localVelocity.get(i, j, k)[2];
             }
 
-        cnpy::npz_save(createFileName("output_", iter, 6) + ".npz", "velocity",&data[0],{3,nz,ny,nx},"w"); 
+        cnpy::npz_save(createFileName("output_", iter, 6) + ".npz", "velocity",&data[0],{3,nz,ny,nx},"w");
     }
 
     global::mpi().barrier();

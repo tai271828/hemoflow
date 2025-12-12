@@ -39,6 +39,7 @@ public:
     T getRadius() const { return R; }
     T getArea() const { return nodes.size(); }
     vec3d getCenter() { return center; }
+    vec3d getDirection() { return direction; }
     Box3D *getBoundingBox() { return boundingBox; }
 
     void setName(string name_) {name = name_;}
@@ -48,7 +49,7 @@ private:
     string name;
     GeometryLabel flag;
     OpeningType type;
-    
+
     vector<Index3D> nodes;  // List of LBM nodes on the opening
     vec3d center;           // LBM units
     vec3d direction;        // Normal vector
@@ -97,7 +98,7 @@ class PressureProfile3D {
         PressureProfile3D (scalar3D *pressureValues, T_ scalePressure) : pressure ( pressureValues ), scale (scalePressure)
         { }
 
-        T_ operator() (plint iX, plint iY, plint iZ) const {       
+        T_ operator() (plint iX, plint iY, plint iZ) const {
             T_ prescPressure = (*pressure)[iX][iY][iZ];
             if(prescPressure <= 0)
                 prescPressure = (T_)1.0;
