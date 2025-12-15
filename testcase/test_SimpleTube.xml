@@ -15,7 +15,7 @@
 		<name>Inlet</name>
 		<type>1</type>
 		<label>10</label>
-		<timeScaleFunction>./input/cerebral_flowrate.txt</timeScaleFunction>  <!-- Scale function for this opening. -->
+		<timeScaleFunction>./input/simple_flowrate.txt</timeScaleFunction>  <!-- Scale function for this opening. -->
 		<parameter>0.1</parameter> <!-- [m/s] - Lower velocity for simple tube -->
 	</opening_0>
 
