@@ -87,14 +87,9 @@ jobs:
         mkdir -p build
         cd build
         if [ "${{ matrix.hdf5_source }}" = "custom" ]; then
-          cmake -DHDF5_ROOT=${{ env.HDF5_INSTALL_DIR }} \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DENABLE_MPI=ON \
-                ..
+          cmake -DHDF5_ROOT=${{ env.HDF5_INSTALL_DIR }} ..
         else
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DENABLE_MPI=ON \
-                ..
+          cmake ..
         fi
         make -j $(nproc)
 
