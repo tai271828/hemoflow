@@ -6,7 +6,7 @@
 	<simLength>0.8</simLength> <!-- [s] -->
 	<saveFrequency>0.016</saveFrequency> <!-- [s] -->
 	<!-- The default value of HemoFlow is 1e-11 -->
-	<convergenceTolerance>1e-10</convergenceTolerance>
+	<!-- <convergenceTolerance>1e-10</convergenceTolerance> -->
 </simulation>
 
 <geometry>
