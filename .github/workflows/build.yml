@@ -104,7 +104,12 @@ jobs:
 
     - name: Run Simulation - Short Tube Freeflow Test
       run: |
-        mpirun -n $(nproc) build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
+        # Hardcoded 2 processes rather nproc to avoid using hyper-threads on GitHub runners
+        if [ -n "${{ matrix.container }}" ]; then
+          mpirun --allow-run-as-root -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
+        else
+          mpirun -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
+        fi
 
     - name: Upload hemoFlow binary
       uses: actions/upload-artifact@v4
