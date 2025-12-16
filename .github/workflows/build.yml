@@ -76,18 +76,27 @@ jobs:
 
     - name: Verify HDF5 installation
       run: |
-        ls -la ${{ env.HDF5_INSTALL_DIR }}
-        find ${{ env.HDF5_INSTALL_DIR }} -name "*.so" || true
+        if [ "${{ matrix.hdf5_source }}" = "custom" ]; then
+          echo "Checking custom HDF5 installation..."
+          ls -la ${{ env.HDF5_INSTALL_DIR }}
+          find ${{ env.HDF5_INSTALL_DIR }} -name "*.so" || true
+        else
+          echo "Checking APT HDF5 installation..."
+          dpkg -L libhdf5-mpi-dev | head -20 || true
+          pkg-config --modversion hdf5 || true
+        fi
 
     - name: Build hemoFlow
       run: |
         rm -rf build
         mkdir -p build
         cd build
-        cmake ${{ matrix.hdf5_source == 'custom' && format('-DHDF5_ROOT={0}', env.HDF5_INSTALL_DIR) || '' }} \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DENABLE_MPI=ON \
-              ..
+        if [ "${{ matrix.hdf5_source }}" = "custom" ]; then
+          cmake -DHDF5_ROOT=${{ env.HDF5_INSTALL_DIR }} \
+                ..
+        else
+          cmake ..
+        fi
         make -j $(nproc)
 
     - name: Verify hemoFlow build
