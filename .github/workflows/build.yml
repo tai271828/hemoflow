@@ -1,0 +1,132 @@
+name: Build hemoFlow
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  HDF5_VERSION: hdf5-1_14_0
+  HDF5_INSTALL_DIR: ${{ github.workspace }}/hdf5-installation
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Ubuntu Latest - Custom HDF5"
+            os: ubuntu-latest
+            hdf5_source: custom
+            artifact_id: ubuntu-custom
+          - name: "Ubuntu Latest - APT HDF5"
+            os: ubuntu-latest
+            hdf5_source: apt
+            artifact_id: ubuntu-apt
+          - name: "Debian Stable - APT HDF5"
+            os: ubuntu-latest
+            container: debian:stable
+            hdf5_source: apt
+            artifact_id: debian-apt
+
+    container: ${{ matrix.container }}
+    name: ${{ matrix.name }}
+
+    steps:
+    - name: Checkout hemoFlow
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        PACKAGES="build-essential cmake git libopenmpi-dev openmpi-bin zlib1g-dev python3 python3-pip python3-numpy"
+        if [ "${{ matrix.hdf5_source }}" = "apt" ]; then
+          PACKAGES="$PACKAGES libhdf5-mpi-dev"
+        fi
+
+        if [ -n "${{ matrix.container }}" ]; then
+          apt-get update
+          apt-get install -y $PACKAGES
+        else
+          sudo apt-get update
+          sudo apt-get install -y $PACKAGES
+        fi
+
+    - name: Cache HDF5 build
+      if: matrix.hdf5_source == 'custom'
+      id: cache-hdf5
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.HDF5_INSTALL_DIR }}
+        key: hdf5-${{ env.HDF5_VERSION }}-ubuntu-${{ runner.os }}-parallel
+
+    - name: Build HDF5 (if not cached)
+      if: matrix.hdf5_source == 'custom' && steps.cache-hdf5.outputs.cache-hit != 'true'
+      run: |
+        git clone --depth 1 --branch ${{ env.HDF5_VERSION }} https://github.com/HDFGroup/hdf5.git hdf5-src
+        cd hdf5-src
+        mkdir build && cd build
+        cmake -G "Unix Makefiles" \
+          -DHDF5_ENABLE_PARALLEL=ON \
+          -DHDF5_ENABLE_Z_LIB_SUPPORT=ON \
+          -DCMAKE_INSTALL_PREFIX=${{ env.HDF5_INSTALL_DIR }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          ..
+        make -j $(nproc)
+        make install
+
+    - name: Verify HDF5 installation
+      run: |
+        if [ "${{ matrix.hdf5_source }}" = "custom" ]; then
+          echo "Checking custom HDF5 installation..."
+          ls -la ${{ env.HDF5_INSTALL_DIR }}
+          find ${{ env.HDF5_INSTALL_DIR }} -name "*.so" || true
+        else
+          echo "Checking APT HDF5 installation..."
+          dpkg -L libhdf5-mpi-dev | head -20 || true
+          pkg-config --modversion hdf5 || true
+        fi
+
+    - name: Build hemoFlow
+      run: |
+        rm -rf build
+        mkdir -p build
+        cd build
+        if [ "${{ matrix.hdf5_source }}" = "custom" ]; then
+          cmake -DHDF5_ROOT=${{ env.HDF5_INSTALL_DIR }} ..
+        else
+          cmake ..
+        fi
+        make -j $(nproc)
+
+    - name: Verify hemoFlow build
+      run: |
+        ls -la build/
+        file build/hemoFlow || true
+        ldd build/hemoFlow || true
+
+    - name: Run Simulation - Short Tube Freeflow Test
+      run: |
+        # Hardcoded 2 processes rather nproc to avoid using hyper-threads on GitHub runners
+        if [ -n "${{ matrix.container }}" ]; then
+          mpirun --allow-run-as-root -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
+        else
+          mpirun -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
+        fi
+
+    - name: Upload hemoFlow binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: hemoFlow-binary-${{ matrix.artifact_id }}
+        path: build/hemoFlow
+        retention-days: 7
+
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs-${{ matrix.artifact_id }}
+        path: |
+          build/CMakeFiles/*.log
+          build/CMakeCache.txt
+        retention-days: 7
