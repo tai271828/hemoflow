@@ -3,7 +3,7 @@
 	<blockSize>30</blockSize>	<!-- Target atomic block size for domain decomposition. (Side length, LB nodes) -->
 	<outputDir>output_simple_tube</outputDir> <!-- Where to put the output files. Relative to this config file.-->
 	<!-- Extended for better ParaView visibility -->
-	<simLength>0.8</simLength> <!-- [s] -->
+	<simLength>3.2</simLength> <!-- [s] -->
 	<saveFrequency>0.016</saveFrequency> <!-- [s] -->
 	<!-- The default value of HemoFlow is 1e-11 -->
 	<!-- <convergenceTolerance>1e-10</convergenceTolerance> -->
