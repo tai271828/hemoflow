@@ -210,9 +210,9 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     DataSetCreateProps props;
     // Use adaptive chunking based on dataset dimensions
     // Chunk size should be <= dimension size
-    hsize_t chunk_x = std::min(100UL, (hsize_t)Nx);
-    hsize_t chunk_y = std::min(100UL, (hsize_t)Ny);
-    hsize_t chunk_z = std::min(100UL, (hsize_t)Nz);
+    hsize_t chunk_x = std::min<hsize_t>(Nz, 100);
+    hsize_t chunk_y = std::min<hsize_t>(Ny, 100);
+    hsize_t chunk_z = std::min<hsize_t>(Nx, 100);
     // The order matters if chunking is not cubic
     props.add(Chunking(std::vector<hsize_t>{chunk_z, chunk_y, chunk_x}));
     // Enable shuffle
