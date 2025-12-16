@@ -117,7 +117,7 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: build-logs
+        name: build-logs-${{ matrix.hdf5_source }}-${{ matrix.container || 'ubuntu' }}
         path: |
           build/CMakeFiles/*.log
           build/CMakeCache.txt
