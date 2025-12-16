@@ -519,7 +519,7 @@ int main(int argc, char *argv[])
         pcout << endl << "*********** Entering stationary warmup phase ***********" << endl;
 
         int convergenceSteps = 10*max(max(Nx, Ny), Nz);
-        T minDE = 1e-11; T dE = 100; T prevE = 0;
+        T minDE = convergenceTolerance; T dE = 100; T prevE = 0;
 
         // imposeOpenings(0.0);
 
