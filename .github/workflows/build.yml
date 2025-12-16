@@ -31,6 +31,9 @@ jobs:
     name: ${{ matrix.name }}
 
     steps:
+    - name: Checkout hemoFlow
+      uses: actions/checkout@v4
+
     - name: Install system dependencies
       run: |
         ${{ matrix.container && '' || 'sudo' }} apt-get update
