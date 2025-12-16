@@ -88,9 +88,13 @@ jobs:
         cd build
         if [ "${{ matrix.hdf5_source }}" = "custom" ]; then
           cmake -DHDF5_ROOT=${{ env.HDF5_INSTALL_DIR }} \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DENABLE_MPI=ON \
                 ..
         else
-          cmake ..
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DENABLE_MPI=ON \
+                ..
         fi
         make -j $(nproc)
 
@@ -99,6 +103,10 @@ jobs:
         ls -la build/
         file build/hemoFlow || true
         ldd build/hemoFlow || true
+
+    - name: Run Simulation - Short Tube Freeflow Test
+      run: |
+        mpirun -n $(nproc) build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
 
     - name: Upload hemoFlow binary
       uses: actions/upload-artifact@v4
