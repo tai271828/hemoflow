@@ -19,13 +19,16 @@ jobs:
           - name: "Ubuntu Latest - Custom HDF5"
             os: ubuntu-latest
             hdf5_source: custom
+            artifact_id: ubuntu-custom
           - name: "Ubuntu Latest - APT HDF5"
             os: ubuntu-latest
             hdf5_source: apt
+            artifact_id: ubuntu-apt
           - name: "Debian Stable - APT HDF5"
             os: ubuntu-latest
             container: debian:stable
             hdf5_source: apt
+            artifact_id: debian-apt
 
     container: ${{ matrix.container }}
     name: ${{ matrix.name }}
@@ -114,7 +117,7 @@ jobs:
     - name: Upload hemoFlow binary
       uses: actions/upload-artifact@v4
       with:
-        name: hemoFlow-binary-${{ matrix.hdf5_source }}-${{ replace(matrix.container || 'ubuntu', ':', '-') }}
+        name: hemoFlow-binary-${{ matrix.artifact_id }}
         path: build/hemoFlow
         retention-days: 7
 
@@ -122,7 +125,7 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: build-logs-${{ matrix.hdf5_source }}-${{ replace(matrix.container || 'ubuntu', ':', '-') }}
+        name: build-logs-${{ matrix.artifact_id }}
         path: |
           build/CMakeFiles/*.log
           build/CMakeCache.txt
