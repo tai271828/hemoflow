@@ -109,9 +109,9 @@ jobs:
       run: |
         # Hardcoded 2 processes rather nproc to avoid using hyper-threads on GitHub runners
         if [ -n "${{ matrix.container }}" ]; then
-          mpirun --allow-run-as-root -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
+          mpirun --allow-run-as-root -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml 2>&1 | tee sim-short-tube-${{ matrix.artifact_id }}.log
         else
-          mpirun -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
+          mpirun -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml 2>&1 | tee sim-short-tube-${{ matrix.artifact_id }}.log
         fi
 
     - name: Run Simulation - Freeflow Test
@@ -119,10 +119,19 @@ jobs:
       run: |
         # Hardcoded 2 processes rather nproc to avoid using hyper-threads on GitHub runners
         if [ -n "${{ matrix.container }}" ]; then
-          mpirun --allow-run-as-root -n 2 build/hemoFlow testcase/test_Pressure.xml
+          mpirun --allow-run-as-root -n 2 build/hemoFlow testcase/test_Freeflow.xml 2>&1 | tee sim-freeflow-${{ matrix.artifact_id }}.log
         else
-          mpirun -n 2 build/hemoFlow testcase/test_Pressure.xml
+          mpirun -n 2 build/hemoFlow testcase/test_Freeflow.xml 2>&1 | tee sim-freeflow-${{ matrix.artifact_id }}.log
         fi
+
+    - name: Upload simulation logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: simulation-logs-${{ matrix.artifact_id }}
+        path: sim-*.log
+        if-no-files-found: ignore
+        retention-days: 7
 
     - name: Upload hemoFlow binary
       uses: actions/upload-artifact@v4
