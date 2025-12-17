@@ -105,7 +105,17 @@ jobs:
         file build/hemoFlow || true
         ldd build/hemoFlow || true
 
-    - name: Run Simulation - Short Tube Freeflow Test
+    - name: Run Simulation - Short Tube Freeflow Test (Sequential)
+      if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/ci-dry-run-full')
+      run: |
+        # Hardcoded 2 processes rather nproc to avoid using hyper-threads on GitHub runners
+        if [ -n "${{ matrix.container }}" ]; then
+          build/hemoFlow testcase/test_SimpleTube_Freeflow.xml 2>&1 | tee sim-short-tube-${{ matrix.artifact_id }}.log
+        else
+          build/hemoFlow testcase/test_SimpleTube_Freeflow.xml 2>&1 | tee sim-short-tube-${{ matrix.artifact_id }}.log
+        fi
+
+    - name: Run Simulation - Short Tube Freeflow Test (MPI)
       run: |
         # Hardcoded 2 processes rather nproc to avoid using hyper-threads on GitHub runners
         if [ -n "${{ matrix.container }}" ]; then
@@ -114,7 +124,7 @@ jobs:
           mpirun -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml 2>&1 | tee sim-short-tube-${{ matrix.artifact_id }}.log
         fi
 
-    - name: Run Simulation - Freeflow Test
+    - name: Run Simulation - Freeflow Test (MPI)
       if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/ci-dry-run-full')
       run: |
         # Hardcoded 2 processes rather nproc to avoid using hyper-threads on GitHub runners
