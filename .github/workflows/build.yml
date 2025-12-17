@@ -114,6 +114,16 @@ jobs:
           mpirun -n 2 build/hemoFlow testcase/test_SimpleTube_Freeflow.xml
         fi
 
+    - name: Run Simulation - Freeflow Test
+      if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/ci-dry-run-full')
+      run: |
+        # Hardcoded 2 processes rather nproc to avoid using hyper-threads on GitHub runners
+        if [ -n "${{ matrix.container }}" ]; then
+          mpirun --allow-run-as-root -n 2 build/hemoFlow testcase/test_Pressure.xml
+        else
+          mpirun -n 2 build/hemoFlow testcase/test_Pressure.xml
+        fi
+
     - name: Upload hemoFlow binary
       uses: actions/upload-artifact@v4
       with:
