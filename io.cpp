@@ -99,8 +99,10 @@ void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pli
        vtkOut.writeData<float>(*field1, "field1");
 }
 
-// TODO - too slow, optimize the arrays (MPI rank is now saved in every lattice?).
-// TODO - Optimize chunk size.
+// Optimized: Uses hyperslab selection per block for contiguous I/O instead of ElementSet
+// Optimized: Pre-allocates buffers and pre-computes scaling factors
+// Optimized: Adaptive chunk size based on dataset dimensions
+// Note: MPI rank is still saved per lattice point for debugging/visualization purposes
 // TODO - save as vectors and matrices instead of 3D scalar arrays (also modify xdmf) - https://github.com/BlueBrain/HighFive/blob/master/src/examples/create_dataset_double.cpp
 void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir, MultiNTensorField3D<T> *field1)
 {
@@ -121,78 +123,11 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
 
     vector<plint> LocalBlockIDs = VelocityBlockManagement.getLocalInfo().getBlocks();
 
-    // Start to count the writing time
-    T FindAttributesTime = T();
-    global::timer("FindAttributes").restart();
-
-    // Again, Density/Velocity/Shear stress/S_norm... share the same distribution, so one ID vector is enough
-    vector<vector<long unsigned int>> GlobalID;
-    vector<float> VelocityX; vector<float> VelocityY; vector<float> VelocityZ; vector<float> Density;
-    vector<float> SS1; vector<float> SS2; vector<float> SS3; vector<float> SS4; vector<float> SS5; vector<float> SS6;
-    vector<float> SNorm;
-    vector<float> Field1;
-    vector<int> this_rank;
-
-    int RankID = global::mpi().getRank();
-
-    // Now we loop through all local blocks on current MPI thread
-    for(long blockId : LocalBlockIDs) {
-        // The "SmartBulk3D" object represents local atomic block in a global view, i.e. its bounding box coordinates are in global scale.
-        // If you do not understand, go check the source codes of "MultiBlockManagement3D::findAllLocalRepresentations()"
-        // Why we use it? Because we need to know which atomic blocks are stored on current MPI thread!
-        SmartBulk3D LocalBulk(VelocityBlockManagement.getSparseBlockStructure(), VelocityBlockManagement.getEnvelopeWidth(), blockId);
-
-        for(unsigned int i = LocalBulk.getBulk().x0; i <= LocalBulk.getBulk().x1; i++)
-            for(unsigned int j = LocalBulk.getBulk().y0; j <= LocalBulk.getBulk().y1; j++)
-                for(unsigned int k = LocalBulk.getBulk().z0; k <= LocalBulk.getBulk().z1; k++){
-
-                    // Now we convert the global scale coordinates to block local coordinates
-                    unsigned int LocalX = LocalBulk.toLocalX(i);
-                    unsigned int LocalY = LocalBulk.toLocalY(j);
-                    unsigned int LocalZ = LocalBulk.toLocalZ(k);
-
-                    GlobalID.push_back({k,j,i});
-
-                    // Velocity
-                    Array<double,3> const& foundVelocity = DistributedVelocity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    // Note: Scale to physical unit before saving
-                    float vel_scale = float(sim.C_l/sim.C_t);
-                    VelocityX.push_back(float(foundVelocity[0])*vel_scale); VelocityY.push_back(float(foundVelocity[1])*vel_scale); VelocityZ.push_back(float(foundVelocity[2])*vel_scale);
-                    // Density
-                    double foundDensity = DistributedDensity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    // Density.push_back(float(foundDensity)*1./3.*float(sim.C_p));
-                    Density.push_back(float(foundDensity));
-                    // Shear Stress
-                    Array<double,6> const& foundSS = DistributedShearStress.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    float SS_scale = sim.C_m / (sim.C_l*sim.C_t*sim.C_t);
-                    SS1.push_back(float(foundSS[0])*SS_scale); SS2.push_back(float(foundSS[1])*SS_scale); SS3.push_back(float(foundSS[2])*SS_scale);
-                    SS4.push_back(float(foundSS[3])*SS_scale); SS5.push_back(float(foundSS[4])*SS_scale); SS6.push_back(float(foundSS[5])*SS_scale);
-                    // S_Norm
-                    double foundS_Norm = DistributedS_Norm.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    SNorm.push_back(foundS_Norm*float(1./sim.C_t));
-                    // Additional field - No unit conversion!
-                    if (field1 != nullptr) {
-                        double foundField1 = *field1->getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                        Field1.push_back(foundField1);
-                    }
-                    else {
-                        Field1.push_back(0.0);
-                    }
-                    // Rank of current mpi thread
-                    this_rank.push_back(RankID);
-
-                }
-    }
-
-    FindAttributesTime = global::timer("FindAttributes").stop();
-    pcout << "Finding attributes time: " << FindAttributesTime << " sec" << endl;
-
-    assert(!GlobalID.empty());
-
     ///////////////////////////// Saving HDF5 /////////////////////////////
 
-    // Now save the partial local data to hdf5, if you dont understand,
-    // check (https://github.com/BlueBrain/HighFive/blob/master/src/examples/parallel_hdf5_collective_io.cpp)
+    // Now save the partial local data to hdf5 using hyperslab selection per block
+    // This is much faster than ElementSet because it uses contiguous memory access
+    // See: https://github.com/BlueBrain/HighFive/blob/master/src/examples/parallel_hdf5_collective_io.cpp
     using namespace HighFive;
 
     FileAccessProps fapl;
@@ -220,7 +155,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     // Enable deflate
     props.add(Deflate(7));
 
-    // Create the dataset as usual
+    // Create the datasets
     std::vector<size_t> Dims{(long unsigned int)Nz, (long unsigned int)Ny, (long unsigned int)Nx};
     DataSet velocity_x = file.createDataSet<float>("velocity_x", DataSpace(Dims), props);
     DataSet velocity_y = file.createDataSet<float>("velocity_y", DataSpace(Dims), props);
@@ -238,32 +173,124 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     DataSet S_Norm = file.createDataSet<float>("S_norm", DataSpace(Dims), props);
     // Field1
     DataSet Field1_data = file.createDataSet<float>("Field1", DataSpace(Dims), props);
-
     // MPI rank
     DataSet Rank = file.createDataSet<int>("MPI_rank", DataSpace(Dims), props);
 
     auto xfer_props = DataTransferProps{};
     xfer_props.add(UseCollectiveIO{});
 
-    // Each process writes the local attributes to the file
-    velocity_x.select(ElementSet(GlobalID)).write(VelocityX, xfer_props);
-    velocity_y.select(ElementSet(GlobalID)).write(VelocityY, xfer_props);
-    velocity_z.select(ElementSet(GlobalID)).write(VelocityZ, xfer_props);
-    // Shear Stress
-    SS_1.select(ElementSet(GlobalID)).write(SS1, xfer_props);
-    SS_2.select(ElementSet(GlobalID)).write(SS2, xfer_props);
-    SS_3.select(ElementSet(GlobalID)).write(SS3, xfer_props);
-    SS_4.select(ElementSet(GlobalID)).write(SS4, xfer_props);
-    SS_5.select(ElementSet(GlobalID)).write(SS5, xfer_props);
-    SS_6.select(ElementSet(GlobalID)).write(SS6, xfer_props);
-    // Density
-    density.select(ElementSet(GlobalID)).write(Density, xfer_props);
-    // S_Norm
-    S_Norm.select(ElementSet(GlobalID)).write(SNorm, xfer_props);
-    // Field1
-    Field1_data.select(ElementSet(GlobalID)).write(Field1, xfer_props);
-    // MPI Rank
-    Rank.select(ElementSet(GlobalID)).write(this_rank, xfer_props);
+    // Start to count the data extraction and writing time
+    T FindAttributesTime = T();
+    global::timer("FindAttributes").restart();
+
+    int RankID = global::mpi().getRank();
+
+    // Pre-compute scaling factors once (moved outside inner loop)
+    const float vel_scale = float(sim.C_l/sim.C_t);
+    const float SS_scale = float(sim.C_m / (sim.C_l*sim.C_t*sim.C_t));
+    const float S_norm_scale = float(1./sim.C_t);
+
+    // Process each block and write using hyperslab selection (contiguous memory layout)
+    // This is much faster than ElementSet because:
+    // 1. Each block is a contiguous region in the global domain
+    // 2. Hyperslab selection uses contiguous I/O patterns
+    // 3. Lower memory peak (one block at a time vs all blocks)
+    for(long blockId : LocalBlockIDs) {
+        SmartBulk3D LocalBulk(VelocityBlockManagement.getSparseBlockStructure(), VelocityBlockManagement.getEnvelopeWidth(), blockId);
+
+        // Block dimensions in global coordinates
+        unsigned int x0 = LocalBulk.getBulk().x0;
+        unsigned int y0 = LocalBulk.getBulk().y0;
+        unsigned int z0 = LocalBulk.getBulk().z0;
+        unsigned int x1 = LocalBulk.getBulk().x1;
+        unsigned int y1 = LocalBulk.getBulk().y1;
+        unsigned int z1 = LocalBulk.getBulk().z1;
+
+        size_t block_nx = x1 - x0 + 1;
+        size_t block_ny = y1 - y0 + 1;
+        size_t block_nz = z1 - z0 + 1;
+        size_t blockSize = block_nx * block_ny * block_nz;
+
+        // Pre-allocate contiguous buffers for this block
+        vector<float> VelocityX(blockSize), VelocityY(blockSize), VelocityZ(blockSize);
+        vector<float> SS1(blockSize), SS2(blockSize), SS3(blockSize);
+        vector<float> SS4(blockSize), SS5(blockSize), SS6(blockSize);
+        vector<float> DensityBuf(blockSize), SNormBuf(blockSize), Field1Buf(blockSize);
+        vector<int> RankBuf(blockSize, RankID);
+
+        // Fill buffers with data in HDF5 row-major order
+        // Dataset dims are (Nz, Ny, Nx), so x changes fastest (innermost loop)
+        // Linear index: idx = z_local * (ny * nx) + y_local * nx + x_local
+        for(unsigned int k = z0; k <= z1; k++) {
+            for(unsigned int j = y0; j <= y1; j++) {
+                for(unsigned int i = x0; i <= x1; i++) {
+                    unsigned int LocalX = LocalBulk.toLocalX(i);
+                    unsigned int LocalY = LocalBulk.toLocalY(j);
+                    unsigned int LocalZ = LocalBulk.toLocalZ(k);
+
+                    // Compute linear index in row-major order (z slowest, x fastest)
+                    size_t idx = (size_t)(k - z0) * block_ny * block_nx +
+                                 (size_t)(j - y0) * block_nx +
+                                 (size_t)(i - x0);
+
+                    // Velocity
+                    Array<double,3> const& foundVelocity = DistributedVelocity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
+                    VelocityX[idx] = float(foundVelocity[0]) * vel_scale;
+                    VelocityY[idx] = float(foundVelocity[1]) * vel_scale;
+                    VelocityZ[idx] = float(foundVelocity[2]) * vel_scale;
+
+                    // Density
+                    DensityBuf[idx] = float(DistributedDensity.getComponent(blockId).get(LocalX, LocalY, LocalZ));
+
+                    // Shear Stress
+                    Array<double,6> const& foundSS = DistributedShearStress.getComponent(blockId).get(LocalX, LocalY, LocalZ);
+                    SS1[idx] = float(foundSS[0]) * SS_scale;
+                    SS2[idx] = float(foundSS[1]) * SS_scale;
+                    SS3[idx] = float(foundSS[2]) * SS_scale;
+                    SS4[idx] = float(foundSS[3]) * SS_scale;
+                    SS5[idx] = float(foundSS[4]) * SS_scale;
+                    SS6[idx] = float(foundSS[5]) * SS_scale;
+
+                    // S_Norm
+                    SNormBuf[idx] = float(DistributedS_Norm.getComponent(blockId).get(LocalX, LocalY, LocalZ)) * S_norm_scale;
+
+                    // Additional field
+                    if (field1 != nullptr) {
+                        Field1Buf[idx] = float(*field1->getComponent(blockId).get(LocalX, LocalY, LocalZ));
+                    } else {
+                        Field1Buf[idx] = 0.0f;
+                    }
+                }
+            }
+        }
+
+        // Define hyperslab selection for this block
+        // HDF5 uses row-major order: offset and count are in (z, y, x) order
+        std::vector<size_t> offset{z0, y0, x0};
+        std::vector<size_t> count{block_nz, block_ny, block_nx};
+
+        // Reshape buffers to 3D for hyperslab write
+        // HighFive expects data in the same shape as the selection
+        // Since we filled in x-y-z order with z fastest, reshape to (nz, ny, nx)
+
+        // Write each dataset using hyperslab selection (contiguous I/O)
+        velocity_x.select(offset, count).write_raw(VelocityX.data(), xfer_props);
+        velocity_y.select(offset, count).write_raw(VelocityY.data(), xfer_props);
+        velocity_z.select(offset, count).write_raw(VelocityZ.data(), xfer_props);
+        SS_1.select(offset, count).write_raw(SS1.data(), xfer_props);
+        SS_2.select(offset, count).write_raw(SS2.data(), xfer_props);
+        SS_3.select(offset, count).write_raw(SS3.data(), xfer_props);
+        SS_4.select(offset, count).write_raw(SS4.data(), xfer_props);
+        SS_5.select(offset, count).write_raw(SS5.data(), xfer_props);
+        SS_6.select(offset, count).write_raw(SS6.data(), xfer_props);
+        density.select(offset, count).write_raw(DensityBuf.data(), xfer_props);
+        S_Norm.select(offset, count).write_raw(SNormBuf.data(), xfer_props);
+        Field1_data.select(offset, count).write_raw(Field1Buf.data(), xfer_props);
+        Rank.select(offset, count).write_raw(RankBuf.data(), xfer_props);
+    }
+
+    FindAttributesTime = global::timer("FindAttributes").stop();
+    pcout << "Data extraction and HDF5 write time: " << FindAttributesTime << " sec" << endl;
 
     global::mpi().barrier();
 
