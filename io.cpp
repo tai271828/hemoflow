@@ -99,12 +99,10 @@ void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pli
        vtkOut.writeData<float>(*field1, "field1");
 }
 
-// TODO - too slow, optimize the arrays (MPI rank is now saved in every lattice?).
 // TODO - Optimize chunk size.
 // TODO - save as vectors and matrices instead of 3D scalar arrays (also modify xdmf) - https://github.com/BlueBrain/HighFive/blob/master/src/examples/create_dataset_double.cpp
 void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir, MultiNTensorField3D<T> *field1)
 {
-
     T SaveTime = T();
     global::timer("SaveTime").restart();
 
@@ -114,87 +112,14 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     MultiScalarField3D<double> DistributedDensity = *computeDensity(lattice);
     MultiTensorField3D<double,6> DistributedShearStress = *computeShearStress(lattice);
     MultiScalarField3D<double> DistributedS_Norm = *computeSymmetricTensorNorm(*computeStrainRateFromStress(lattice));
-    // MultiScalarField3D<double> DistributedField1 = *field1; // Used for additional fields, e.g. porosity, do any necessary calculations here.
-
+    
     // Density/Velocity/... shared the same atomic block distribution!
     MultiBlockManagement3D VelocityBlockManagement = DistributedVelocity.getMultiBlockManagement();
-
     vector<plint> LocalBlockIDs = VelocityBlockManagement.getLocalInfo().getBlocks();
 
-    // Start to count the writing time
-    T FindAttributesTime = T();
-    global::timer("FindAttributes").restart();
-
-    // Again, Density/Velocity/Shear stress/S_norm... share the same distribution, so one ID vector is enough
-    vector<vector<long unsigned int>> GlobalID;
-    vector<float> VelocityX; vector<float> VelocityY; vector<float> VelocityZ; vector<float> Density;
-    vector<float> SS1; vector<float> SS2; vector<float> SS3; vector<float> SS4; vector<float> SS5; vector<float> SS6;
-    vector<float> SNorm;
-    vector<float> Field1;
-    vector<int> this_rank;
-
-    int RankID = global::mpi().getRank();
-
-    // Now we loop through all local blocks on current MPI thread
-    for(long blockId : LocalBlockIDs) {
-        // The "SmartBulk3D" object represents local atomic block in a global view, i.e. its bounding box coordinates are in global scale.
-        // If you do not understand, go check the source codes of "MultiBlockManagement3D::findAllLocalRepresentations()"
-        // Why we use it? Because we need to know which atomic blocks are stored on current MPI thread!
-        SmartBulk3D LocalBulk(VelocityBlockManagement.getSparseBlockStructure(), VelocityBlockManagement.getEnvelopeWidth(), blockId);
-
-        for(unsigned int i = LocalBulk.getBulk().x0; i <= LocalBulk.getBulk().x1; i++)
-            for(unsigned int j = LocalBulk.getBulk().y0; j <= LocalBulk.getBulk().y1; j++)
-                for(unsigned int k = LocalBulk.getBulk().z0; k <= LocalBulk.getBulk().z1; k++){
-
-                    // Now we convert the global scale coordinates to block local coordinates
-                    unsigned int LocalX = LocalBulk.toLocalX(i);
-                    unsigned int LocalY = LocalBulk.toLocalY(j);
-                    unsigned int LocalZ = LocalBulk.toLocalZ(k);
-
-                    GlobalID.push_back({k,j,i});
-
-                    // Velocity
-                    Array<double,3> const& foundVelocity = DistributedVelocity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    // Note: Scale to physical unit before saving
-                    float vel_scale = float(sim.C_l/sim.C_t);
-                    VelocityX.push_back(float(foundVelocity[0])*vel_scale); VelocityY.push_back(float(foundVelocity[1])*vel_scale); VelocityZ.push_back(float(foundVelocity[2])*vel_scale);
-                    // Density
-                    double foundDensity = DistributedDensity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    // Density.push_back(float(foundDensity)*1./3.*float(sim.C_p));
-                    Density.push_back(float(foundDensity));
-                    // Shear Stress
-                    Array<double,6> const& foundSS = DistributedShearStress.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    float SS_scale = sim.C_m / (sim.C_l*sim.C_t*sim.C_t);
-                    SS1.push_back(float(foundSS[0])*SS_scale); SS2.push_back(float(foundSS[1])*SS_scale); SS3.push_back(float(foundSS[2])*SS_scale);
-                    SS4.push_back(float(foundSS[3])*SS_scale); SS5.push_back(float(foundSS[4])*SS_scale); SS6.push_back(float(foundSS[5])*SS_scale);
-                    // S_Norm
-                    double foundS_Norm = DistributedS_Norm.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    SNorm.push_back(foundS_Norm*float(1./sim.C_t));
-                    // Additional field - No unit conversion!
-                    if (field1 != nullptr) {
-                        double foundField1 = *field1->getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                        Field1.push_back(foundField1);
-                    }
-                    else {
-                        Field1.push_back(0.0);
-                    }
-                    // Rank of current mpi thread
-                    this_rank.push_back(RankID);
-
-                }
-    }
-
-    FindAttributesTime = global::timer("FindAttributes").stop();
-    pcout << "Finding attributes time: " << FindAttributesTime << " sec" << endl;
-
-    assert(!GlobalID.empty());
-
-    ///////////////////////////// Saving HDF5 /////////////////////////////
-
-    // Now save the partial local data to hdf5, if you dont understand,
-    // check (https://github.com/BlueBrain/HighFive/blob/master/src/examples/parallel_hdf5_collective_io.cpp)
     using namespace HighFive;
 
+    // File Access Properties
     FileAccessProps fapl;
     // Tell HDF5 to use MPI-IO
     fapl.add(MPIOFileAccess{MPI_COMM_WORLD, MPI_INFO_NULL});
@@ -220,8 +145,9 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     // Enable deflate
     props.add(Deflate(7));
 
-    // Create the dataset as usual
     std::vector<size_t> Dims{(long unsigned int)Nz, (long unsigned int)Ny, (long unsigned int)Nx};
+
+    // Create Datasets
     DataSet velocity_x = file.createDataSet<float>("velocity_x", DataSpace(Dims), props);
     DataSet velocity_y = file.createDataSet<float>("velocity_y", DataSpace(Dims), props);
     DataSet velocity_z = file.createDataSet<float>("velocity_z", DataSpace(Dims), props);
@@ -242,28 +168,106 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     // MPI rank
     DataSet Rank = file.createDataSet<int>("MPI_rank", DataSpace(Dims), props);
 
-    auto xfer_props = DataTransferProps{};
-    xfer_props.add(UseCollectiveIO{});
+    int RankID = global::mpi().getRank();
+    
+    // Use Independent IO for writing blocks individually to avoid collective alignment issues with unequal block counts
+    auto xfer_props = DataTransferProps{}; 
+    
+    // Scaling factors
+    float vel_scale = float(sim.C_l/sim.C_t);
+    float SS_scale = sim.C_m / (sim.C_l*sim.C_t*sim.C_t);
+    float SNorm_scale = float(1./sim.C_t);
 
-    // Each process writes the local attributes to the file
-    velocity_x.select(ElementSet(GlobalID)).write(VelocityX, xfer_props);
-    velocity_y.select(ElementSet(GlobalID)).write(VelocityY, xfer_props);
-    velocity_z.select(ElementSet(GlobalID)).write(VelocityZ, xfer_props);
-    // Shear Stress
-    SS_1.select(ElementSet(GlobalID)).write(SS1, xfer_props);
-    SS_2.select(ElementSet(GlobalID)).write(SS2, xfer_props);
-    SS_3.select(ElementSet(GlobalID)).write(SS3, xfer_props);
-    SS_4.select(ElementSet(GlobalID)).write(SS4, xfer_props);
-    SS_5.select(ElementSet(GlobalID)).write(SS5, xfer_props);
-    SS_6.select(ElementSet(GlobalID)).write(SS6, xfer_props);
-    // Density
-    density.select(ElementSet(GlobalID)).write(Density, xfer_props);
-    // S_Norm
-    S_Norm.select(ElementSet(GlobalID)).write(SNorm, xfer_props);
-    // Field1
-    Field1_data.select(ElementSet(GlobalID)).write(Field1, xfer_props);
-    // MPI Rank
-    Rank.select(ElementSet(GlobalID)).write(this_rank, xfer_props);
+    for(long blockId : LocalBlockIDs) {
+        SmartBulk3D LocalBulk(VelocityBlockManagement.getSparseBlockStructure(), VelocityBlockManagement.getEnvelopeWidth(), blockId);
+        
+        Box3D bulk = LocalBulk.getBulk();
+        
+        // HDF5 dimensions: Z, Y, X
+        size_t nx_local = bulk.x1 - bulk.x0 + 1;
+        size_t ny_local = bulk.y1 - bulk.y0 + 1;
+        size_t nz_local = bulk.z1 - bulk.z0 + 1;
+        size_t num_elements = nx_local * ny_local * nz_local;
+        
+        // Vectors for this block
+        vector<float> b_vx(num_elements), b_vy(num_elements), b_vz(num_elements);
+        vector<float> b_rho(num_elements);
+        vector<float> b_ss1(num_elements), b_ss2(num_elements), b_ss3(num_elements);
+        vector<float> b_ss4(num_elements), b_ss5(num_elements), b_ss6(num_elements);
+        vector<float> b_snorm(num_elements);
+        vector<float> b_f1(num_elements);
+        vector<int> b_rank(num_elements);
+        
+        size_t idx = 0;
+        
+        // Iterate in Z-Y-X order to match HDF5 row-major layout (C-style)
+        // for dataset dimensions {Nz, Ny, Nx}, X is the fastest varying index.
+        for(unsigned int k = bulk.z0; k <= bulk.z1; k++) {
+            unsigned int LocalZ = LocalBulk.toLocalZ(k);
+            for(unsigned int j = bulk.y0; j <= bulk.y1; j++) {
+                unsigned int LocalY = LocalBulk.toLocalY(j);
+                for(unsigned int i = bulk.x0; i <= bulk.x1; i++) {
+                    unsigned int LocalX = LocalBulk.toLocalX(i);
+                    
+                    // Velocity
+                    Array<double,3> const& foundVelocity = DistributedVelocity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
+                    b_vx[idx] = float(foundVelocity[0])*vel_scale;
+                    b_vy[idx] = float(foundVelocity[1])*vel_scale;
+                    b_vz[idx] = float(foundVelocity[2])*vel_scale;
+                    
+                    // Density
+                    double foundDensity = DistributedDensity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
+                    b_rho[idx] = float(foundDensity);
+                    
+                    // Shear Stress
+                    Array<double,6> const& foundSS = DistributedShearStress.getComponent(blockId).get(LocalX, LocalY, LocalZ);
+                    b_ss1[idx] = float(foundSS[0])*SS_scale;
+                    b_ss2[idx] = float(foundSS[1])*SS_scale;
+                    b_ss3[idx] = float(foundSS[2])*SS_scale;
+                    b_ss4[idx] = float(foundSS[3])*SS_scale;
+                    b_ss5[idx] = float(foundSS[4])*SS_scale;
+                    b_ss6[idx] = float(foundSS[5])*SS_scale;
+                    
+                    // S_Norm
+                    double foundS_Norm = DistributedS_Norm.getComponent(blockId).get(LocalX, LocalY, LocalZ);
+                    b_snorm[idx] = foundS_Norm*SNorm_scale;
+                    
+                    // Field1
+                    if (field1 != nullptr) {
+                        double foundField1 = *field1->getComponent(blockId).get(LocalX, LocalY, LocalZ);
+                        b_f1[idx] = float(foundField1);
+                    } else {
+                        b_f1[idx] = 0.0f;
+                    }
+                    
+                    // Rank
+                    b_rank[idx] = RankID;
+                    
+                    idx++;
+                }
+            }
+        }
+        
+        // Select Hyperslab and Write
+        std::vector<size_t> offset = {(size_t)bulk.z0, (size_t)bulk.y0, (size_t)bulk.x0};
+        std::vector<size_t> count = {nz_local, ny_local, nx_local};
+        
+        velocity_x.select(count, offset).write(b_vx, xfer_props);
+        velocity_y.select(count, offset).write(b_vy, xfer_props);
+        velocity_z.select(count, offset).write(b_vz, xfer_props);
+        
+        SS_1.select(count, offset).write(b_ss1, xfer_props);
+        SS_2.select(count, offset).write(b_ss2, xfer_props);
+        SS_3.select(count, offset).write(b_ss3, xfer_props);
+        SS_4.select(count, offset).write(b_ss4, xfer_props);
+        SS_5.select(count, offset).write(b_ss5, xfer_props);
+        SS_6.select(count, offset).write(b_ss6, xfer_props);
+        
+        density.select(count, offset).write(b_rho, xfer_props);
+        S_Norm.select(count, offset).write(b_snorm, xfer_props);
+        Field1_data.select(count, offset).write(b_f1, xfer_props);
+        Rank.select(count, offset).write(b_rank, xfer_props);
+    }
 
     global::mpi().barrier();
 
