@@ -101,7 +101,7 @@ void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pli
 
 // TODO - too slow, optimize the arrays (MPI rank is now saved in every lattice?).
 // TODO - Optimize chunk size.
-// TODO - save as vectors and matrices instead of 3D scalar arrays (also modify xdmf) - https://github.com/BlueBrain/HighFive/blob/master/src/examples/create_dataset_double.cpp
+// DONE - velocity saved as 4D vector [Nz,Ny,Nx,3], shear stress as 4D tensor [Nz,Ny,Nx,6] with XDMF Vector/Tensor6 attributes
 void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, plint iter, string outDir, MultiNTensorField3D<T> *field1)
 {
 
@@ -125,10 +125,19 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     T FindAttributesTime = T();
     global::timer("FindAttributes").restart();
 
-    // Again, Density/Velocity/Shear stress/S_norm... share the same distribution, so one ID vector is enough
+    // GlobalID for 3D scalar arrays (density, S_norm, Field1, MPI_rank)
     vector<vector<long unsigned int>> GlobalID;
-    vector<float> VelocityX; vector<float> VelocityY; vector<float> VelocityZ; vector<float> Density;
-    vector<float> SS1; vector<float> SS2; vector<float> SS3; vector<float> SS4; vector<float> SS5; vector<float> SS6;
+    // GlobalID for 4D velocity array [Nz, Ny, Nx, 3] - includes component index
+    vector<vector<long unsigned int>> GlobalID_Velocity;
+    // GlobalID for 4D shear stress array [Nz, Ny, Nx, 6] - includes component index
+    vector<vector<long unsigned int>> GlobalID_ShearStress;
+
+    // Velocity stored as interleaved vector [vx0, vy0, vz0, vx1, vy1, vz1, ...]
+    vector<float> Velocity;
+    // Shear stress stored as interleaved tensor [s1_0, s2_0, ..., s6_0, s1_1, s2_1, ...]
+    vector<float> ShearStress;
+    // Scalars remain as before
+    vector<float> Density;
     vector<float> SNorm;
     vector<float> Field1;
     vector<int> this_rank;
@@ -151,22 +160,34 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
                     unsigned int LocalY = LocalBulk.toLocalY(j);
                     unsigned int LocalZ = LocalBulk.toLocalZ(k);
 
+                    // Store 3D coordinates for scalar fields
                     GlobalID.push_back({k,j,i});
 
-                    // Velocity
+                    // Velocity - stored as 4D array [Nz, Ny, Nx, 3]
                     Array<double,3> const& foundVelocity = DistributedVelocity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
                     // Note: Scale to physical unit before saving
                     float vel_scale = float(sim.C_l/sim.C_t);
-                    VelocityX.push_back(float(foundVelocity[0])*vel_scale); VelocityY.push_back(float(foundVelocity[1])*vel_scale); VelocityZ.push_back(float(foundVelocity[2])*vel_scale);
-                    // Density
+                    // Push 4D coordinates (k, j, i, component) for each velocity component
+                    GlobalID_Velocity.push_back({k, j, i, 0});
+                    GlobalID_Velocity.push_back({k, j, i, 1});
+                    GlobalID_Velocity.push_back({k, j, i, 2});
+                    // Push interleaved velocity values
+                    Velocity.push_back(float(foundVelocity[0])*vel_scale);
+                    Velocity.push_back(float(foundVelocity[1])*vel_scale);
+                    Velocity.push_back(float(foundVelocity[2])*vel_scale);
+
+                    // Density (scalar - uses 3D GlobalID)
                     double foundDensity = DistributedDensity.getComponent(blockId).get(LocalX, LocalY, LocalZ);
-                    // Density.push_back(float(foundDensity)*1./3.*float(sim.C_p));
                     Density.push_back(float(foundDensity));
-                    // Shear Stress
+
+                    // Shear Stress - stored as 4D array [Nz, Ny, Nx, 6]
                     Array<double,6> const& foundSS = DistributedShearStress.getComponent(blockId).get(LocalX, LocalY, LocalZ);
                     float SS_scale = sim.C_m / (sim.C_l*sim.C_t*sim.C_t);
-                    SS1.push_back(float(foundSS[0])*SS_scale); SS2.push_back(float(foundSS[1])*SS_scale); SS3.push_back(float(foundSS[2])*SS_scale);
-                    SS4.push_back(float(foundSS[3])*SS_scale); SS5.push_back(float(foundSS[4])*SS_scale); SS6.push_back(float(foundSS[5])*SS_scale);
+                    // Push 4D coordinates (k, j, i, component) for each stress component
+                    for (int c = 0; c < 6; c++) {
+                        GlobalID_ShearStress.push_back({k, j, i, (long unsigned int)c});
+                        ShearStress.push_back(float(foundSS[c])*SS_scale);
+                    }
                     // S_Norm
                     double foundS_Norm = DistributedS_Norm.getComponent(blockId).get(LocalX, LocalY, LocalZ);
                     SNorm.push_back(foundS_Norm*float(1./sim.C_t));
@@ -206,63 +227,61 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     std::string file_name = createFileName(outDir + "/output_", iter, 6);
     File file(file_name + ".h5", File::Truncate, fapl);
 
-    // For compression
-    DataSetCreateProps props;
-    // Use adaptive chunking based on dataset dimensions
-    // Chunk size should be <= dimension size
+    // For compression - base chunk sizes
     hsize_t chunk_x = std::min<hsize_t>(Nx, 100);
     hsize_t chunk_y = std::min<hsize_t>(Ny, 100);
     hsize_t chunk_z = std::min<hsize_t>(Nz, 100);
-    // The order matters if chunking is not cubic
-    props.add(Chunking(std::vector<hsize_t>{chunk_z, chunk_y, chunk_x}));
-    // Enable shuffle
-    props.add(Shuffle());
-    // Enable deflate
-    props.add(Deflate(7));
 
-    // Create the dataset as usual
+    // Properties for 3D scalar datasets (density, S_norm, Field1, MPI_rank)
+    DataSetCreateProps props3D;
+    props3D.add(Chunking(std::vector<hsize_t>{chunk_z, chunk_y, chunk_x}));
+    props3D.add(Shuffle());
+    props3D.add(Deflate(7));
+
+    // Properties for 4D velocity dataset [Nz, Ny, Nx, 3]
+    DataSetCreateProps propsVelocity;
+    propsVelocity.add(Chunking(std::vector<hsize_t>{chunk_z, chunk_y, chunk_x, 3}));
+    propsVelocity.add(Shuffle());
+    propsVelocity.add(Deflate(7));
+
+    // Properties for 4D shear stress dataset [Nz, Ny, Nx, 6]
+    DataSetCreateProps propsShearStress;
+    propsShearStress.add(Chunking(std::vector<hsize_t>{chunk_z, chunk_y, chunk_x, 6}));
+    propsShearStress.add(Shuffle());
+    propsShearStress.add(Deflate(7));
+
+    // Dimensions for scalar fields (3D)
     std::vector<size_t> Dims{(long unsigned int)Nz, (long unsigned int)Ny, (long unsigned int)Nx};
-    DataSet velocity_x = file.createDataSet<float>("velocity_x", DataSpace(Dims), props);
-    DataSet velocity_y = file.createDataSet<float>("velocity_y", DataSpace(Dims), props);
-    DataSet velocity_z = file.createDataSet<float>("velocity_z", DataSpace(Dims), props);
-    // Shear Stress
-    DataSet SS_1 = file.createDataSet<float>("sigma_1", DataSpace(Dims), props);
-    DataSet SS_2 = file.createDataSet<float>("sigma_2", DataSpace(Dims), props);
-    DataSet SS_3 = file.createDataSet<float>("sigma_3", DataSpace(Dims), props);
-    DataSet SS_4 = file.createDataSet<float>("sigma_4", DataSpace(Dims), props);
-    DataSet SS_5 = file.createDataSet<float>("sigma_5", DataSpace(Dims), props);
-    DataSet SS_6 = file.createDataSet<float>("sigma_6", DataSpace(Dims), props);
-    // Density
-    DataSet density = file.createDataSet<float>("density", DataSpace(Dims), props);
-    // S_Norm
-    DataSet S_Norm = file.createDataSet<float>("S_norm", DataSpace(Dims), props);
-    // Field1
-    DataSet Field1_data = file.createDataSet<float>("Field1", DataSpace(Dims), props);
+    // Dimensions for velocity (4D vector)
+    std::vector<size_t> VelocityDims{(long unsigned int)Nz, (long unsigned int)Ny, (long unsigned int)Nx, 3};
+    // Dimensions for shear stress (4D tensor - 6 components for symmetric tensor)
+    std::vector<size_t> ShearStressDims{(long unsigned int)Nz, (long unsigned int)Ny, (long unsigned int)Nx, 6};
 
-    // MPI rank
-    DataSet Rank = file.createDataSet<int>("MPI_rank", DataSpace(Dims), props);
+    // Create velocity dataset as a single 4D vector field
+    DataSet velocity = file.createDataSet<float>("velocity", DataSpace(VelocityDims), propsVelocity);
+    // Create shear stress dataset as a single 4D tensor field (symmetric, 6 components)
+    DataSet sigma = file.createDataSet<float>("sigma", DataSpace(ShearStressDims), propsShearStress);
+    // Density (scalar)
+    DataSet density = file.createDataSet<float>("density", DataSpace(Dims), props3D);
+    // S_Norm (scalar)
+    DataSet S_Norm = file.createDataSet<float>("S_norm", DataSpace(Dims), props3D);
+    // Field1 (scalar)
+    DataSet Field1_data = file.createDataSet<float>("Field1", DataSpace(Dims), props3D);
+    // MPI rank (scalar)
+    DataSet Rank = file.createDataSet<int>("MPI_rank", DataSpace(Dims), props3D);
 
     auto xfer_props = DataTransferProps{};
     xfer_props.add(UseCollectiveIO{});
 
     // Each process writes the local attributes to the file
-    velocity_x.select(ElementSet(GlobalID)).write(VelocityX, xfer_props);
-    velocity_y.select(ElementSet(GlobalID)).write(VelocityY, xfer_props);
-    velocity_z.select(ElementSet(GlobalID)).write(VelocityZ, xfer_props);
-    // Shear Stress
-    SS_1.select(ElementSet(GlobalID)).write(SS1, xfer_props);
-    SS_2.select(ElementSet(GlobalID)).write(SS2, xfer_props);
-    SS_3.select(ElementSet(GlobalID)).write(SS3, xfer_props);
-    SS_4.select(ElementSet(GlobalID)).write(SS4, xfer_props);
-    SS_5.select(ElementSet(GlobalID)).write(SS5, xfer_props);
-    SS_6.select(ElementSet(GlobalID)).write(SS6, xfer_props);
-    // Density
+    // Velocity - write as 4D vector using expanded element selection
+    velocity.select(ElementSet(GlobalID_Velocity)).write(Velocity, xfer_props);
+    // Shear Stress - write as 4D tensor using expanded element selection
+    sigma.select(ElementSet(GlobalID_ShearStress)).write(ShearStress, xfer_props);
+    // Scalar fields use 3D element selection
     density.select(ElementSet(GlobalID)).write(Density, xfer_props);
-    // S_Norm
     S_Norm.select(ElementSet(GlobalID)).write(SNorm, xfer_props);
-    // Field1
     Field1_data.select(ElementSet(GlobalID)).write(Field1, xfer_props);
-    // MPI Rank
     Rank.select(ElementSet(GlobalID)).write(this_rank, xfer_props);
 
     global::mpi().barrier();
@@ -319,53 +338,18 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
         fprintf(xmf, "       </DataItem>\n");
         fprintf(xmf, "     </Attribute>\n");
         fprintf(xmf, "     \n");
-        // Velocities
-        fprintf(xmf, "     <Attribute Name=\"Velocity-X [m/s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/velocity_x\n", h5_name.c_str());
-        fprintf(xmf, "       </DataItem>\n");
-        fprintf(xmf, "     </Attribute>\n");
-        fprintf(xmf, "     <Attribute Name=\"Velocity-Y [m/s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/velocity_y\n", h5_name.c_str());
-        fprintf(xmf, "       </DataItem>\n");
-        fprintf(xmf, "     </Attribute>\n");
-        fprintf(xmf, "     <Attribute Name=\"Velocity-Z [m/s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/velocity_z\n", h5_name.c_str());
+        // Velocity - stored as a 4D vector field [Nz, Ny, Nx, 3]
+        fprintf(xmf, "     <Attribute Name=\"Velocity [m/s]\" AttributeType=\"Vector\" Center=\"Cell\">\n");
+        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d 3\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
+        fprintf(xmf, "          %s.h5:/velocity\n", h5_name.c_str());
         fprintf(xmf, "       </DataItem>\n");
         fprintf(xmf, "     </Attribute>\n");
         fprintf(xmf, "     \n");
-        // Shear Stress
-        fprintf(xmf, "     <Attribute Name=\"Shear Stress 1 [1/m2s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/sigma_1\n", h5_name.c_str());
-        fprintf(xmf, "       </DataItem>\n");
-        fprintf(xmf, "     </Attribute>\n");
-        fprintf(xmf, "     <Attribute Name=\"Shear Stress 2 [1/m2s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/sigma_2\n", h5_name.c_str());
-        fprintf(xmf, "       </DataItem>\n");
-        fprintf(xmf, "     </Attribute>\n");
-        fprintf(xmf, "     <Attribute Name=\"Shear Stress 3 [1/m2s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/sigma_3\n", h5_name.c_str());
-        fprintf(xmf, "       </DataItem>\n");
-        fprintf(xmf, "     </Attribute>\n");
-        fprintf(xmf, "     \n");
-        fprintf(xmf, "     <Attribute Name=\"Shear Stress 4 [1/m2s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/sigma_4\n", h5_name.c_str());
-        fprintf(xmf, "       </DataItem>\n");
-        fprintf(xmf, "     </Attribute>\n");
-        fprintf(xmf, "     <Attribute Name=\"Shear Stress 5 [1/m2s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/sigma_5\n", h5_name.c_str());
-        fprintf(xmf, "       </DataItem>\n");
-        fprintf(xmf, "     </Attribute>\n");
-        fprintf(xmf, "     <Attribute Name=\"Shear Stress 6 [1/m2s]\" AttributeType=\"Scalar\" Center=\"Cell\">\n");
-        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
-        fprintf(xmf, "          %s.h5:/sigma_6\n", h5_name.c_str());
+        // Shear Stress - stored as a 4D symmetric tensor field [Nz, Ny, Nx, 6]
+        // Tensor6 format: xx, yy, zz, xy, xz, yz (symmetric 3x3 tensor with 6 independent components)
+        fprintf(xmf, "     <Attribute Name=\"Shear Stress [Pa]\" AttributeType=\"Tensor6\" Center=\"Cell\">\n");
+        fprintf(xmf, "       <DataItem Dimensions=\"%d %d %d 6\" NumberType=\"Float\" Precision=\"4\" Format=\"HDF\">\n", Nz, Ny, Nx);
+        fprintf(xmf, "          %s.h5:/sigma\n", h5_name.c_str());
         fprintf(xmf, "       </DataItem>\n");
         fprintf(xmf, "     </Attribute>\n");
         fprintf(xmf, "     \n");
