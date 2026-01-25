@@ -10,7 +10,7 @@
 </simulation>
 
 <geometry>
-	<file>./input/simple_tube_small.npz</file> <!-- Geometry descriptor file location. Relative to this config file. -->
+	<file>./input/simple_tube_straight.npz</file> <!-- Geometry descriptor file location. Relative to this config file. -->
 
 	<!-- Opening types: 1 - Velocity; 2 - Murray (velocity); 3- Pressure; 4 - Freeflow -->
 	<!-- Create a separate tag for every opening. -->
