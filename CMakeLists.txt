@@ -137,3 +137,19 @@ endif()
 if(ENABLE_MPI)
     target_link_libraries(${EXECUTABLE_NAME} ${MPI_CXX_LIBRARIES})
 endif()
+
+###############################################################################
+# Preprocessor executable (no MPI, HDF5, or Palabos dependency)
+###############################################################################
+set(PREPROCESSOR_NAME "hemoFlowPreprocessor")
+add_executable(${PREPROCESSOR_NAME} "hemoFlowPreprocessor.cpp")
+target_sources(${PREPROCESSOR_NAME} PRIVATE "preprocessor_core.cpp")
+target_sources(${PREPROCESSOR_NAME} PRIVATE "external/cnpy/cnpy.cpp")
+# tinyxml for VTP parsing
+file(GLOB_RECURSE TINYXML_SRC "palabos/externalLibraries/tinyxml/*.cpp")
+target_sources(${PREPROCESSOR_NAME} PRIVATE ${TINYXML_SRC})
+target_include_directories(${PREPROCESSOR_NAME} PRIVATE
+    "external/cnpy" "palabos/externalLibraries")
+set_target_properties(${PREPROCESSOR_NAME} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_compile_options(${PREPROCESSOR_NAME} PRIVATE -std=c++17)
+target_link_libraries(${PREPROCESSOR_NAME} ${ZLIB_LIBRARIES})
