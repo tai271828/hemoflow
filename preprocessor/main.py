@@ -32,25 +32,26 @@ def inRange3D(value3D, rangeValue3D, distance):
 
 def generateCutList(voxelDomainSize, radiusTangentVoxelList):
     sidesToCut = np.zeros(6)
-    
-    # If centerline point is within this distance of the boundary it is considered an opening
-    distance = 4  # 4 voxel distance: note, cutting away unused layers might influence this!
 
     if DEBUG_MODE:
-            print("-> (DEBUG) generatin cutlist -> voxelDomainSize:", voxelDomainSize) 
-    
+            print("-> (DEBUG) generatin cutlist -> voxelDomainSize:", voxelDomainSize)
+
+    # For each centerline endpoint, find the nearest domain boundary and mark it for cutting
     for o in radiusTangentVoxelList:
         pos = o[1]
 
         if DEBUG_MODE:
-            print("-> (DEBUG) generatin cutlist -> centerline point:", pos)    
+            print("-> (DEBUG) generatin cutlist -> centerline point:", pos)
 
+        # Compute distance to each of the 6 boundaries
+        dists = np.zeros(6)
         for j in range(3):
-            if inRange(pos[j], 0, distance):
-                sidesToCut[j*2]=1
-            if inRange(pos[j], voxelDomainSize[j], distance):
-                sidesToCut[j*2+1]=1
-            
+            dists[j*2]   = np.abs(pos[j])                       # distance to min boundary
+            dists[j*2+1] = np.abs(voxelDomainSize[j] - pos[j])  # distance to max boundary
+
+        nearest = np.argmin(dists)
+        sidesToCut[nearest] = 1
+
     return np.where(sidesToCut == 1)[0]
 
 if __name__ == "__main__":
@@ -59,7 +60,7 @@ if __name__ == "__main__":
         sys.exit(-1) 
 
     cutWidth = 1 # Might need to set this to 2 if there is more than 1 padding layer for some reason
-    distance = 4
+    distance = 15
 
     confFile = sys.argv[1]
     workDir = os.path.dirname(confFile)
@@ -134,7 +135,7 @@ if __name__ == "__main__":
         nrrd.write(outputBaseName+"wall_fluid.nrrd", volWithWalls)
 
     print("Size after cutting layers for openings:", volWithWalls.shape)
-    volume = np.product(volWithWalls.shape)
+    volume = np.prod(volWithWalls.shape)
     fluids = np.count_nonzero(volWithWalls == 2)
     print("Volume:", volume)
     print("Fluid nodes:", fluids)

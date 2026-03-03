@@ -48,7 +48,11 @@ def getOpeningsFromCenterline(fileName):
     data = reader.GetOutput()
     points = data.GetPoints()
     pdata = data.GetPointData()
-    rdata = pdata.GetArray("MaximumInscribedSphereRadius") 
+    rdata = pdata.GetArray("MaximumInscribedSphereRadius")
+    if rdata is None:
+        rdata = pdata.GetArray("Radius")
+    if rdata is None:
+        raise RuntimeError("Centerline VTP has no 'MaximumInscribedSphereRadius' or 'Radius' array")
 
     # Read the number of lines in the dataset
     nLines = data.GetNumberOfLines()
