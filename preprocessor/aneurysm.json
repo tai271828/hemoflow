@@ -1,0 +1,28 @@
+{
+  "_comment": "HemoFlow Preprocessor Configuration Example - Shows all available options",
+
+  "geometry_original_stl": "input/full_closed_rotated.stl",
+  "centerline_vtp": "input/centerline_model_rotated.vtp",
+  "stent_mesh_base": "",
+
+  "_resolution_comment": "Use EITHER target_elements OR target_dx (not both). Leave the other as empty string.",
+  "target_elements": "1000000",
+  "target_dx": "",
+
+  "_output_comment": "Output file configuration",
+  "output_base_name": "geometry_",
+  "output_dir": ".",
+
+  "_processing_comment": "Processing parameters",
+  "cutWidth": "1",
+  "distance": "8",
+  "si_factor": "0.001",
+  "inhomogen": false,
+
+  "_debug_comment": "Debug output configuration (optional)",
+  "debug": {
+    "enabled": false,
+    "outputs": [],
+    "output_dir": "."
+  }
+}
