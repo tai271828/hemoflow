@@ -8,7 +8,7 @@
 </simulation>
 
 <geometry>
-	<file>./input/vox_NAP180_ane_c.npz</file> <!-- Geometry descriptor file location. Relative to this config file. -->
+	<file>../../data-clinical-input/data-from-frank/input/geometry_w_coil_c.npz</file> <!-- Geometry descriptor file location. Relative to this config file. -->
 
 	<!-- Opening types: 1 - Velocity; 2 - Murray (velocity); 3- Pressure; 4 - Freeflow -->
 	<!-- Create a separate tag for every opening. -->
