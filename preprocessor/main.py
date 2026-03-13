@@ -76,14 +76,15 @@ if __name__ == "__main__":
     vesselGeomFile = workDir + "/" + confData["geometry_original_stl"]
     
     haveStent = False
+    stentGeomFile = ""
     if "stent_folder" in confData.keys() and len(confData["stent_folder"]) > 0:
         dirName = os.path.split(workDir)[1]
         stentFileName = confData["stent_folder"] + "_" + dirName + "_stent_mesh.stl"
         stentGeomFile = os.path.join(workDir,confData["stent_folder"],stentFileName)
-    elif (len(confData["stent_mesh_base"]) > 0):
+    elif "stent_mesh_base" in confData.keys() and (len(confData["stent_mesh_base"]) > 0):
         stentGeomFile = workDir + "/" + confData["stent_mesh_base"] + "mesh.stl"
     
-    if os.path.isfile(stentGeomFile):
+    if len(stentGeomFile) > 0 and os.path.isfile(stentGeomFile):
         haveStent = True
     
     centerLineFile = workDir + "/" + confData["centerline_vtp"]
