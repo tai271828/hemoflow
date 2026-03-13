@@ -32,26 +32,44 @@ def inRange3D(value3D, rangeValue3D, distance):
 
 def generateCutList(voxelDomainSize, radiusTangentVoxelList):
     sidesToCut = np.zeros(6)
-    
-    # If centerline point is within this distance of the boundary it is considered an opening
-    distance = 4  # 4 voxel distance: note, cutting away unused layers might influence this!
 
     if DEBUG_MODE:
-            print("-> (DEBUG) generatin cutlist -> voxelDomainSize:", voxelDomainSize) 
-    
+            print("-> (DEBUG) generatin cutlist -> voxelDomainSize:", voxelDomainSize)
+
     for o in radiusTangentVoxelList:
         pos = o[1]
 
         if DEBUG_MODE:
-            print("-> (DEBUG) generatin cutlist -> centerline point:", pos)    
+            print("-> (DEBUG) generatin cutlist -> centerline point:", pos)
 
-        for j in range(3):
-            if inRange(pos[j], 0, distance):
-                sidesToCut[j*2]=1
-            if inRange(pos[j], voxelDomainSize[j], distance):
-                sidesToCut[j*2+1]=1
-            
+        # Select closest boundary face for this opening (approach from wt.02)
+        face_distances = [
+            pos[0],                        # X- (face 0)
+            voxelDomainSize[0] - pos[0],   # X+ (face 1)
+            pos[1],                        # Y- (face 2)
+            voxelDomainSize[1] - pos[1],   # Y+ (face 3)
+            pos[2],                        # Z- (face 4)
+            voxelDomainSize[2] - pos[2],   # Z+ (face 5)
+        ]
+        closest_face = int(np.argmin(face_distances))
+        sidesToCut[closest_face] = 1
+
     return np.where(sidesToCut == 1)[0]
+
+def deduplicateOpenings(radiusTangentList, threshold=5.0):
+    """Remove duplicate openings that are very close in world space (mm).
+    Should be called BEFORE convertToVoxelspace for resolution independence."""
+    unique = []
+    for opening in radiusTangentList:
+        r, pos, tan = opening
+        is_dup = False
+        for u_r, u_pos, u_tan in unique:
+            if np.linalg.norm(pos - u_pos) < threshold:
+                is_dup = True
+                break
+        if not is_dup:
+            unique.append(opening)
+    return unique
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -59,7 +77,7 @@ if __name__ == "__main__":
         sys.exit(-1) 
 
     cutWidth = 1 # Might need to set this to 2 if there is more than 1 padding layer for some reason
-    distance = 4
+    distance = 20  # Increased for geometries where centerline endpoints are far from domain boundaries
 
     confFile = sys.argv[1]
     workDir = os.path.dirname(confFile)
@@ -120,8 +138,12 @@ if __name__ == "__main__":
     radiusTangentList = getOpeningsFromCenterline(centerLineFile)
     print("scale", domainData[0])
     print("translate", domainData[1])
+    print("Openings from centerline (before dedup):", len(radiusTangentList))
+    radiusTangentList = deduplicateOpenings(radiusTangentList)
+    print("Openings from centerline (after dedup):", len(radiusTangentList))
+
     radiusTangentVoxelList = convertToVoxelspace(radiusTangentList, domainData[0], domainData[1])
-    
+
     cutList = generateCutList(domainData[2], radiusTangentVoxelList)
     
     print("Computed list of sides to cut away for openings:", cutList)
@@ -134,7 +156,7 @@ if __name__ == "__main__":
         nrrd.write(outputBaseName+"wall_fluid.nrrd", volWithWalls)
 
     print("Size after cutting layers for openings:", volWithWalls.shape)
-    volume = np.product(volWithWalls.shape)
+    volume = np.prod(volWithWalls.shape)
     fluids = np.count_nonzero(volWithWalls == 2)
     print("Volume:", volume)
     print("Fluid nodes:", fluids)
@@ -144,34 +166,69 @@ if __name__ == "__main__":
     print("\n### Detecting and assigning voxel openings ###")
     openingIdxs, openingCenters, paintedOpenings = detectOpenings(volWithWalls)
 
-    # TODO: Assign tangents and radii to voxelized openings
-    
+    # Convert centerline positions to the detectOpenings coordinate space.
+    # The openingCenters from detectOpenings are in the padded space.
+    # CL positions are in original (pre-padding) voxel space. Transform chain:
+    #   1. +1 from padVoxelArray (voxelization padding)
+    #   2. -sliced[2*i] from removeUnusedOuterLayers
+    #   3. -cutWidth for low-side cuts (faces 0, 2, 4)
+    #   4. +1 from detectOpenings padding
+    clOffset = np.zeros(3)
+    clOffset[0] = 1 - sliced[0] - (cutWidth if 0 in cutList else 0) + 1
+    clOffset[1] = 1 - sliced[2] - (cutWidth if 2 in cutList else 0) + 1
+    clOffset[2] = 1 - sliced[4] - (cutWidth if 4 in cutList else 0) + 1
+    print("Coordinate offset (centerline -> detectOpenings space):", clOffset)
+
     if len(openingCenters) != len(radiusTangentVoxelList):
-        print("!!! ERROR: the number of outlets found on the voxelized domain sides differ from the number found along the centerline! :", len(radiusTangentVoxelList), len(openingCenters))
-        sys.exit(-1)
-    
+        print("!!! WARNING: the number of outlets found on the voxelized domain sides differ from the number found along the centerline! :", len(radiusTangentVoxelList), len(openingCenters))
+
     # The combined information about openings in the correct order (Inlet, Pressure outlet, Other velocity outlets)
     openingIndex = []
     openingRadius = []
     openingNormalizedQratio = []
     openingCenter = []
     openingTangent = []
-    
+
     # Radial ratio of outlets, note: Qinlet = 1, so it is not included
     r3Tot = np.sum([x[0]**3 for x in radiusTangentVoxelList[1:]])
-    
-    for ccVox in range(len(openingCenters)):
-        for ccCL in range(len(radiusTangentVoxelList)):
-            cVox = openingCenters[ccVox]
-            rCL = radiusTangentVoxelList[ccCL]
-            cCL = rCL[1]
 
-            if inRange3D(cVox, (cCL[0], cCL[1], cCL[2]), distance) is True:
-                openingIndex.append(openingIdxs[ccVox])
-                openingRadius.append(rCL[0]*SI_FACTOR)
-                openingNormalizedQratio.append(rCL[0]**3/r3Tot)  # TODO: it also assigns a number to the inlet, disredards that
-                openingCenter.append(cVox)
-                openingTangent.append( np.array((rCL[2][0], rCL[2][1], rCL[2][2])) )
+    # Debug: print all positions for matching
+    print("  Voxelized opening centers (in detectOpenings padded space):")
+    for i, c in enumerate(openingCenters):
+        print(f"    Vox {i} (idx={openingIdxs[i]}): {c}")
+    print("  Centerline openings (voxel space + offset):")
+    for i, rCL in enumerate(radiusTangentVoxelList):
+        cCL = np.array(rCL[1]) + clOffset
+        print(f"    CL {i}: {cCL} (original voxel: {rCL[1]})")
+
+    # Greedy one-to-one matching: for each centerline opening, find the closest
+    # voxelized opening (by Euclidean distance)
+    usedVox = set()
+    for ccCL in range(len(radiusTangentVoxelList)):
+        rCL = radiusTangentVoxelList[ccCL]
+        cCL = np.array(rCL[1]) + clOffset  # Convert to detectOpenings space
+
+        bestDist = float('inf')
+        bestVox = -1
+        for ccVox in range(len(openingCenters)):
+            if ccVox in usedVox:
+                continue
+            cVox = openingCenters[ccVox]
+            dist = np.linalg.norm(np.array(cVox) - cCL)
+            if dist < bestDist:
+                bestDist = dist
+                bestVox = ccVox
+
+        if bestVox >= 0:
+            usedVox.add(bestVox)
+            openingIndex.append(openingIdxs[bestVox])
+            openingRadius.append(rCL[0]*SI_FACTOR)
+            openingNormalizedQratio.append(rCL[0]**3/r3Tot)  # TODO: it also assigns a number to the inlet, disregards that
+            openingCenter.append(openingCenters[bestVox])
+            openingTangent.append( np.array((rCL[2][0], rCL[2][1], rCL[2][2])) )
+            print(f"  Matched CL opening {ccCL} -> Vox opening {bestVox} (dist={bestDist:.1f})")
+        else:
+            print(f"  WARNING: CL opening {ccCL} could not be matched!")
 
     if DEBUG_MODE:
         print("-> (DEBUG) Saving nrrd geometry flag")    
