@@ -17,7 +17,7 @@ CONFIG="$PROJECT_ROOT/input.frank.config"
 VERIFY="$PROJECT_ROOT/scripts/verify_npz.py"
 OUTPUT_DIR="$PROJECT_ROOT/output"
 OUTPUT="$OUTPUT_DIR/geometry_w_coil_c.npz"
-REFERENCE="$PROJECT_ROOT/data-will-not-commit/data-from-frank/geometry_w_coil_c.npz"
+REFERENCE="$PROJECT_ROOT/data-will-not-commit/data-from-frank/input/geometry_w_coil_c.npz"
 
 # Check prerequisites
 if [ ! -x "$VENV_PYTHON" ]; then
