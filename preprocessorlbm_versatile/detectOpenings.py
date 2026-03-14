@@ -214,39 +214,48 @@ def paint_inlets_outlets(inlets_outlets, data):
     # inlets_outlets.pop(0)
     
     
-    # Hardcoded
-    '''
-    inlet 6: SVC
-    inlet 7: IVC
-    inlet 4: RHV
-    inlet 3: MHV
-    inlet 2: LHV
-    '''
-    
-    '''
-    outlet 5: LPA
-    outlet 8: RPA
-    outlet 0/1: RPA side branches
-    '''
-    
-    paint_dic = {6: CONSTANTS.INLET_SVC, 7: CONSTANTS.INLET_IVC, 4: CONSTANTS.INLET_RHV, 3: CONSTANTS.INLET_MHV,
-                 2: CONSTANTS.INLET_LHV, 5: CONSTANTS.OUTLET_LPA, 8: CONSTANTS.OUTLET_RPA, 0: CONSTANTS.OUTLET_SIDE_P,
-                 1: CONSTANTS.OUTLET_SIDE_V}
+    # Hardcoded paint_dic for the specific 9-opening liver geometry
+    # (SVC, IVC, RHV, MHV, LHV, LPA, RPA, 2 side branches)
+    # For other geometries, fall back to generic labeling:
+    # largest opening = inlet(10), smallest = pressure_outlet(11), rest = velocity_outlets(12+)
 
-    print("Number of inlets: ", 5)
-    print("Number of pressure outlets: 0")
-    print("Number of velocity outlet(s): ", 4)
-    
+    paint_dic_9 = {6: CONSTANTS.INLET_SVC, 7: CONSTANTS.INLET_IVC, 4: CONSTANTS.INLET_RHV, 3: CONSTANTS.INLET_MHV,
+                   2: CONSTANTS.INLET_LHV, 5: CONSTANTS.OUTLET_LPA, 8: CONSTANTS.OUTLET_RPA, 0: CONSTANTS.OUTLET_SIDE_P,
+                   1: CONSTANTS.OUTLET_SIDE_V}
+
+    num_openings = len(inlets_outlets)
+
+    if num_openings == 9:
+        paint_dic = paint_dic_9
+        print("Number of inlets: ", 5)
+        print("Number of pressure outlets: 0")
+        print("Number of velocity outlet(s): ", 4)
+    else:
+        # Generic labeling: largest=inlet(10), smallest=pressure_outlet(11), rest=velocity_outlets(12+)
+        paint_dic = {}
+        if num_openings > 0:
+            paint_dic[num_openings - 1] = 10  # largest = inlet
+        if num_openings > 1:
+            paint_dic[0] = 11  # smallest = pressure outlet
+        for i in range(1, num_openings - 1):
+            paint_dic[i] = 12 + (i - 1)  # rest = velocity outlets
+
+        n_inlets = 1 if num_openings > 0 else 0
+        n_pressure = 1 if num_openings > 1 else 0
+        n_velocity = max(0, num_openings - 2)
+        print("Number of inlets:", n_inlets)
+        print("Number of pressure outlets:", n_pressure)
+        print("Number of velocity outlet(s):", n_velocity)
+
     for i, opening in enumerate(inlets_outlets):
         openingC = np.zeros(3)
-        # Find the corresponding paint id
         paint_id = paint_dic[i]
         openingIdx.append(paint_id)
-        
+
         for (x, y, z) in opening:
             data_result[z][x][y] = paint_id
             openingC += np.array((z,x,y))
-            
+
         openingCenter.append(openingC / len(opening))
 
     
@@ -259,10 +268,9 @@ def detectOpenings(inputArray, wall_path):
     global wall_nrrd_path
     wall_nrrd_path = wall_path
 
-    # # Append surrounding layer to avoid boundary checking (THIS SHOULD NOT BE NECESSARY! - > FLUID ON THE EDGE OF THE DOMAIN!)
-    # # Note that if you use Method 1 to detect opening voxels, you can not append surrounding layers, just comment the following line out
+    # Append surrounding layer to avoid boundary checking (THIS SHOULD NOT BE NECESSARY! - > FLUID ON THE EDGE OF THE DOMAIN!)
+    # Note that if you use Method 1 to detect opening voxels, you can not append surrounding layers, just comment the following line out
     data = np.pad(inputArray, 1, 'constant')
-    data = inputArray
 
     # Detect openings
     opening_ids, openingCenter, inlets_outlets, result = detect_inlets_outlets(data)

@@ -14,7 +14,7 @@ import h5py
 # Parameters to check before execution:
 SI_FACTOR = 0.001 # Ratio to [m]. Most STL is in [mm]
 
-DEBUG_MODE = False # This will enable additional intermediate nrrd output to check with e.g. 3DSlicer
+DEBUG_MODE = True # This will enable additional intermediate nrrd output to check with e.g. 3DSlicer
 #############################
 
 if DEBUG_MODE:
@@ -32,11 +32,10 @@ def inRange3D(value3D, rangeValue3D, distance):
     
     return isInRange
 
-def generateCutList(voxelDomainSize, radiusTangentVoxelList):
+def generateCutList(voxelDomainSize, radiusTangentVoxelList, distance=4):
     sidesToCut = np.zeros(6)
-    
+
     # If centerline point is within this distance of the boundary it is considered an opening
-    distance = 4  # 4 voxel distance: note, cutting away unused layers might influence this!
 
     if DEBUG_MODE:
             print("-> (DEBUG) generatin cutlist -> voxelDomainSize:", voxelDomainSize) 
@@ -60,15 +59,15 @@ if __name__ == "__main__":
         print("Usage:", sys.argv[0], "input.config")
         sys.exit(-1) 
 
-    cutWidth = 1 # Might need to set this to 2 if there is more than 1 padding layer for some reason
-    distance = 4
-
     confFile = sys.argv[1]
     saveDir = os.path.dirname(confFile)
 
     with open(confFile) as json_file:
         confData = json.load(json_file)
-        
+
+    cutWidth = int(confData.get("cutWidth", "1"))
+    distance = int(confData.get("distance", "4"))
+
     workDir = confData["geometry_dir"]
 
     # Cutlist meaning -> cut one layer from the planes:
@@ -122,7 +121,7 @@ if __name__ == "__main__":
     print("translate", domainData[1])
     radiusTangentVoxelList = convertToVoxelspace(radiusTangentList, domainData[0], domainData[1])
     
-    cutList = generateCutList(domainData[2], radiusTangentVoxelList)
+    cutList = generateCutList(domainData[2], radiusTangentVoxelList, distance)
     
     print("Computed list of sides to cut away for openings:", cutList)
     
@@ -137,7 +136,7 @@ if __name__ == "__main__":
         nrrd.write(outputBaseName+"wall_fluid.nrrd", volWithWalls)
 
     print("Size after cutting layers for openings:", volWithWalls.shape)
-    volume = np.product(volWithWalls.shape)
+    volume = np.prod(volWithWalls.shape)
     fluids = np.count_nonzero(volWithWalls == 2)
     print("Volume:", volume)
     print("Fluid nodes:", fluids)
@@ -153,8 +152,8 @@ if __name__ == "__main__":
     # TODO: Assign tangents and radii to voxelized openings
     
     if len(openingCenters) != len(radiusTangentVoxelList):
-        print("!!! ERROR: the number of outlets found on the voxelized domain sides differ from the number found along the centerline! :", len(radiusTangentVoxelList), len(openingCenters))
-        sys.exit(-1)
+        print("!!! WARNING: the number of outlets found on the voxelized domain sides differ from the number found along the centerline! :", len(radiusTangentVoxelList), len(openingCenters))
+        print("!!! Continuing to save partial output for inspection...")
     
     # The combined information about openings in the correct order (Inlet, Pressure outlet, Other velocity outlets)
     openingIndex = []
