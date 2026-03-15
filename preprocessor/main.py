@@ -124,7 +124,11 @@ if __name__ == "__main__":
     print("translate", domainData[1])
     radiusTangentVoxelList = convertToVoxelspace(radiusTangentList, domainData[0], domainData[1])
     
-    cutList = generateCutList(domainData[2], radiusTangentVoxelList)
+    # Use unpadded domain size: centerline voxel positions are computed from the
+    # original (unpadded) scale/shift, so the domain boundaries for cut-list
+    # detection must also be unpadded.  padVoxelArray adds +1 on each side (+2 total).
+    unpaddedDomain = tuple(d - 2 for d in domainData[2])
+    cutList = generateCutList(unpaddedDomain, radiusTangentVoxelList)
     
     print("Computed list of sides to cut away for openings:", cutList)
     

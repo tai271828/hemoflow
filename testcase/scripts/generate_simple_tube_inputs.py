@@ -9,6 +9,7 @@ Reference geometry (voxel space, dx=0.25mm):
   - Straight cylinder: radius=10 vox, length=300 vox, 2-voxel walls
   - Grid: 30 x 30 x 300
   - Side opening: circular R=5 vox, at Z=150 (midpoint), Y=max side
+    (fluid passage through wall at Y=26, opening at Y=27)
   - Openings:
       10 (inlet,  317 vox): Z=0   face, R_phys=2.511mm, normal=[0,0,1]
       11 (outlet, 317 vox): Z=299 face, R_phys=2.511mm, normal=[0,0,1]
@@ -16,19 +17,18 @@ Reference geometry (voxel space, dx=0.25mm):
 
 Physical dimensions (mm):
   dx = 0.25 mm/voxel
-  Main tube: R=2.5mm, L=75mm along Z, centered at (cx,cy)=(3.75, 3.75)
-  Side opening: R≈1.25mm, punched through the wall at Y=max, Z=37.5mm
+  Main tube: R=2.5mm, L=75mm along Z
+  Branch stub: R=1.25mm, along +Y at Z=37.5mm, extends ~1mm beyond tube surface
 
 This script creates:
-  - STL: surface mesh of the lumen (main cylinder only — the side opening
-    is a wall cutout, not a separate tube in the original geometry)
+  - STL: watertight Y-junction surface mesh (main cylinder + branch stub)
   - VTP: VMTK-style centerline with MaximumInscribedSphereRadius
   - config.json: preprocessor configuration
 
 Usage:
   python generate_simple_tube_inputs.py [--output-dir DIR]
 
-Dependencies: trimesh, vtk, numpy
+Dependencies: trimesh, manifold3d, vtk, numpy
 """
 
 import argparse
@@ -46,54 +46,70 @@ DX = 0.25                            # mm per voxel
 RADIUS_VOX = 10                      # main tube radius in voxels
 LENGTH_VOX = 300                     # tube length in voxels
 SIDE_R_VOX = 5                       # side opening radius in voxels
+WALL_VOX = 2                         # wall thickness in voxels
 
 R_MAIN = RADIUS_VOX * DX             # 2.5 mm
 L_MAIN = LENGTH_VOX * DX             # 75.0 mm
 R_SIDE = SIDE_R_VOX * DX             # 1.25 mm
 Z_SIDE = L_MAIN / 2                  # 37.5 mm — side opening Z position
 
-# The side opening is a hole punched through the 2-voxel wall.
-# In the STL we just need the main cylinder; the side opening exists
-# only as a wall feature in the voxel domain. For the preprocessor's
-# centerline matching we still record it in the VTP.
-
-# Physical center of tube in XY (grid is 30x30, center at 15,15 voxels)
-CX = 15 * DX  # 3.75 mm
-CY = 15 * DX  # 3.75 mm
+# Branch stub extends from inside the main tube to just beyond the wall.
+# In the NPZ: fluid passage at Y=26 (1 voxel through wall), opening at Y=27.
+# Physical: tube surface at 2.5mm from center, branch tip at ~3.0mm.
+BRANCH_Y_LO = 1.0                    # start inside tube (for clean CSG overlap)
+BRANCH_Y_HI = R_MAIN + WALL_VOX * DX # 2.5 + 0.5 = 3.0 mm (matches wall outer surface)
 
 # Centerline sampling
 CL_STEP = 0.5  # mm between centerline points
 
 
 # ---------------------------------------------------------------------------
-# STL generation — simple capped cylinder (main tube lumen)
+# STL generation — Y-junction (main cylinder + branch stub)
 # ---------------------------------------------------------------------------
 def create_stl(output_path: str) -> None:
     """
-    Create watertight STL of the main tube lumen.
+    Create watertight STL of the Y-junction lumen.
 
-    The original geometry is a straight cylinder with a small side opening
-    punched through the wall. The STL represents the inner lumen surface
-    (a simple capped cylinder). The side opening is a voxel-level feature
-    that doesn't need to appear in the STL.
+    Boolean union of:
+      1. Main capped cylinder (R=2.5mm, L=75mm along Z)
+      2. Branch capped cylinder (R=1.25mm, short stub along +Y at Z=37.5mm)
     """
-    cyl = trimesh.creation.cylinder(
+    # Main cylinder along Z, from Z=0 to Z=L_MAIN
+    main_cyl = trimesh.creation.cylinder(
         radius=R_MAIN,
         height=L_MAIN,
         sections=128,
     )
-    # trimesh cylinder is centered at origin along Z; shift to Z=[0, L_MAIN]
-    cyl.apply_translation([0, 0, L_MAIN / 2])
+    main_cyl.apply_translation([0, 0, L_MAIN / 2])
 
-    assert cyl.is_watertight, "Cylinder mesh is not watertight!"
+    # Branch stub along +Y
+    branch_height = BRANCH_Y_HI - BRANCH_Y_LO
+    branch_center_y = (BRANCH_Y_LO + BRANCH_Y_HI) / 2
+
+    branch_cyl = trimesh.creation.cylinder(
+        radius=R_SIDE,
+        height=branch_height,
+        sections=64,
+    )
+    # Rotate: default Z axis -> Y axis
+    rot = trimesh.transformations.rotation_matrix(np.pi / 2, [1, 0, 0])
+    branch_cyl.apply_transform(rot)
+    branch_cyl.apply_translation([0, branch_center_y, Z_SIDE])
+
+    # Boolean union via manifold3d
+    result = trimesh.boolean.union([main_cyl, branch_cyl], engine="manifold")
+
+    assert result.is_watertight, "Mesh is NOT watertight after CSG!"
+    assert result.is_volume, "Mesh does NOT enclose a volume!"
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    cyl.export(output_path)
+    result.export(output_path)
 
     print(f"STL  -> {output_path}")
-    print(f"       vertices={len(cyl.vertices)}  faces={len(cyl.faces)}")
-    bb = cyl.bounds
+    print(f"       vertices={len(result.vertices)}  faces={len(result.faces)}")
+    bb = result.bounds
     print(f"       bbox  min={bb[0]}  max={bb[1]}")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +121,7 @@ def create_vtp(output_path: str) -> None:
 
     Two lines:
       Line 0: inlet (Z=0) -> outlet (Z=L_MAIN)    — main tube, R=2.5mm
-      Line 1: inlet (Z=0) -> side opening (Y=max)  — path to side opening
+      Line 1: inlet (Z=0) -> side opening (Y=max)  — path to branch tip
     """
     points = vtk.vtkPoints()
     radii = vtk.vtkFloatArray()
@@ -122,7 +138,7 @@ def create_vtp(output_path: str) -> None:
         line0_ids.append(pid)
 
     # --- Line 1: inlet (Z=0) -> side opening ---
-    # Path: along Z to midpoint, then along +Y to the wall surface
+    # Path: along Z to midpoint, then along +Y to branch tip
     n_shared = int(Z_SIDE / CL_STEP) + 1
     line1_ids = []
     for i in range(n_shared):
@@ -131,15 +147,13 @@ def create_vtp(output_path: str) -> None:
         radii.InsertNextTuple1(R_MAIN)
         line1_ids.append(pid)
 
-    # Branch along +Y from center to wall surface
-    # The side opening center is at y = R_MAIN + wall_thickness*DX
-    # wall_thickness = 2 voxels = 0.5mm
-    y_end = R_MAIN + 2 * DX  # 2.5 + 0.5 = 3.0 mm
+    # Branch along +Y from center to branch tip
+    y_end = BRANCH_Y_HI  # must match STL bounding box edge
     n_branch = int(y_end / CL_STEP) + 1
     for i in range(1, n_branch + 1):
         y = min(i * CL_STEP, y_end)
         pid = points.InsertNextPoint(0.0, y, Z_SIDE)
-        # Radius transitions from R_MAIN to R_SIDE
+        # Radius transitions from R_MAIN (at center) to R_SIDE (at tip)
         t = y / y_end
         r = R_MAIN * (1.0 - t) + R_SIDE * t
         radii.InsertNextTuple1(r)
@@ -221,10 +235,11 @@ def main():
     cfg_path = os.path.join(base, "preprocessor_dev.simpletube.config.json")
 
     print("=" * 60)
-    print("SimpleTube geometry generator")
-    print(f"  Main tube : R={R_MAIN} mm, L={L_MAIN} mm, axis=Z")
-    print(f"  Side open : R={R_SIDE} mm, at Z={Z_SIDE} mm, Y=wall")
-    print(f"  dx        : {DX} mm/voxel")
+    print("SimpleTube Y-junction geometry generator")
+    print(f"  Main tube  : R={R_MAIN} mm, L={L_MAIN} mm, axis=Z")
+    print(f"  Branch stub: R={R_SIDE} mm, at Z={Z_SIDE} mm, axis=+Y")
+    print(f"  Branch Y   : [{BRANCH_Y_LO}, {BRANCH_Y_HI}] mm")
+    print(f"  dx         : {DX} mm/voxel")
     print("=" * 60)
 
     create_stl(stl_path)

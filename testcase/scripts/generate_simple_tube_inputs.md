@@ -40,9 +40,10 @@ Side opening: circular hole (R=5 vox) punched through the wall
 ### What the script generates
 
 **STL** (`simpletube.stl`):
-A capped cylinder (R=2.5mm, L=75mm, 128 circumferential sections, 512 faces).
-The side opening is a voxel-level wall feature in the original NPZ; the STL
-only needs the main lumen cylinder.
+A Y-junction mesh: boolean union (via manifold3d) of a main capped cylinder
+(R=2.5mm, L=75mm, 128 sections) and a branch stub (R=1.25mm, along +Y at
+Z=37.5mm, Y=[1.0, 3.0]mm, 64 sections). The branch creates the side opening
+that matches the original NPZ geometry.
 
 **VTP** (`simpletube.vtp`):
 Two polylines with per-point `MaximumInscribedSphereRadius`:
@@ -50,11 +51,27 @@ Two polylines with per-point `MaximumInscribedSphereRadius`:
 - **Line 0** (inlet to Z-max outlet): 151 points along Z from 0 to 75mm, constant R=2.5mm
 - **Line 1** (inlet to side opening): 83 points along Z from 0 to 37.5mm, then along +Y to 3.0mm, R transitions from 2.5mm to 1.25mm
 
-### Bug fix
+### Preprocessor bug fixes
 
-`preprocessor/main.py` had an undefined `stentGeomFile` when no stent is
-configured. Fixed by initializing `stentGeomFile = ""` before the conditional
-block (line 79).
+Three bugs were fixed in the preprocessor to support non-cubic bounding boxes
+(e.g., the Y-junction where the Y extent differs from X):
+
+1. **`preprocessor/main.py` line 79** — `stentGeomFile` was undefined when no
+   stent is configured. Fixed by initializing `stentGeomFile = ""`.
+
+2. **`preprocessor/slice.py` `calculateScaleAndShift`** — Domain dimensions
+   for axes 1 and 2 could be too small when the bounding box is non-cubic.
+   The uniform scale (derived from axis 0) may cause the scaled mesh to extend
+   beyond `int(vox_scale * ds[i])` on other axes. Scanline fill then misses
+   exit crossings that fall outside the grid, producing spurious "is the
+   geometry watertight?" errors. Fixed by ensuring each domain dimension
+   covers `ceil(ds[i] * xyscale) + 1`.
+
+3. **`preprocessor/main.py` `generateCutList`** — Centerline voxel positions
+   are in the unpadded coordinate system, but `generateCutList` was comparing
+   them against the padded domain boundaries (2 voxels larger per axis).
+   Openings at exactly distance=4 from the padded boundary were missed.
+   Fixed by passing the unpadded domain size to `generateCutList`.
 
 ## How to use
 
@@ -64,7 +81,7 @@ From the hemoflow project root:
 
 ```bash
 uv venv .venv
-uv pip install --python .venv/bin/python trimesh vtk numpy numpy-stl
+uv pip install --python .venv/bin/python trimesh manifold3d vtk numpy numpy-stl
 ```
 
 ### 2. Generate the files
@@ -106,7 +123,8 @@ NPZ in `<output-dir>/output/`.
 
 | Package | Purpose |
 |---------|---------|
-| `trimesh` | STL mesh creation (capped cylinder) |
+| `trimesh` | STL mesh creation (boolean union of cylinders) |
+| `manifold3d` | Boolean CSG engine used by trimesh |
 | `vtk` | VTP centerline file writing |
 | `numpy` | Numeric computations |
 | `numpy-stl` | Required by the preprocessor to read STL |

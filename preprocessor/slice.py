@@ -1,5 +1,5 @@
-import math
 import itertools
+import math
 
 import numpy as np
 
@@ -115,6 +115,13 @@ def calculateScaleAndShift(mesh, targetElements):
     #xyscale = (domain[0] - 1.0) / ds[0]
     xyscale = domain[0] / ds[0]
     scale = [xyscale, xyscale, xyscale] #TODO Something is fishy here, what is this xyscale???
+
+    # domain was computed from vox_scale, but the mesh is scaled by xyscale
+    # (derived from domain[0]).  Recompute axes 1 and 2 from xyscale so the
+    # grid tightly fits the scaled mesh: avoids both out-of-grid crossings
+    # (scanline errors) and large gaps (openings too far from boundary).
+    for i in [1, 2]:
+        domain[i] = int(math.ceil(ds[i] * xyscale)) + 1
 
     return (scale, shift, domain, bounding_box)
 
