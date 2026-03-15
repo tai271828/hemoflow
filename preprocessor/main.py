@@ -19,7 +19,7 @@ if DEBUG_MODE:
     import nrrd
 
 def inRange(value, rangeValue, distance):
-    if np.abs(rangeValue-value) < distance:
+    if np.abs(rangeValue-value) <= distance:
         return True
     return False
 
@@ -122,7 +122,10 @@ if __name__ == "__main__":
     print("scale", domainData[0])
     print("translate", domainData[1])
     radiusTangentVoxelList = convertToVoxelspace(radiusTangentList, domainData[0], domainData[1])
-    
+
+    # Offset positions by +1 to account for padding added by padVoxelArray
+    radiusTangentVoxelList = [(r, pos + 1, tan) for r, pos, tan in radiusTangentVoxelList]
+
     cutList = generateCutList(domainData[2], radiusTangentVoxelList, distance)
     
     print("Computed list of sides to cut away for openings:", cutList)
