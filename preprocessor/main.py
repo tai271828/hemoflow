@@ -76,6 +76,7 @@ if __name__ == "__main__":
     vesselGeomFile = workDir + "/" + confData["geometry_original_stl"]
     
     haveStent = False
+    stentGeomFile = ""
     if "stent_folder" in confData.keys() and len(confData["stent_folder"]) > 0:
         dirName = os.path.split(workDir)[1]
         stentFileName = confData["stent_folder"] + "_" + dirName + "_stent_mesh.stl"
