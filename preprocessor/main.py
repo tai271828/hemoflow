@@ -1,5 +1,7 @@
 import sys
 import time
+import io
+import zipfile
 import numpy as np
 import json
 import os
@@ -76,14 +78,15 @@ if __name__ == "__main__":
     vesselGeomFile = workDir + "/" + confData["geometry_original_stl"]
     
     haveStent = False
+    stentGeomFile = ""
     if "stent_folder" in confData.keys() and len(confData["stent_folder"]) > 0:
         dirName = os.path.split(workDir)[1]
         stentFileName = confData["stent_folder"] + "_" + dirName + "_stent_mesh.stl"
         stentGeomFile = os.path.join(workDir,confData["stent_folder"],stentFileName)
-    elif (len(confData["stent_mesh_base"]) > 0):
+    elif "stent_mesh_base" in confData.keys() and (len(confData["stent_mesh_base"]) > 0):
         stentGeomFile = workDir + "/" + confData["stent_mesh_base"] + "mesh.stl"
-    
-    if os.path.isfile(stentGeomFile):
+
+    if len(stentGeomFile) > 0 and os.path.isfile(stentGeomFile):
         haveStent = True
     
     centerLineFile = workDir + "/" + confData["centerline_vtp"]
@@ -223,15 +226,25 @@ if __name__ == "__main__":
     print("\n### Saving final output ###")
     print("File:", outputBaseName+"c.npz")
 
-    #np.savez(sys.argv[2]+".npz", geometryFlag=paintedOpenings, openingDescr=openingDescr, stent=voxel_stent_final.astype(np.short, copy=False))
-    np.savez_compressed(outputBaseName+"c.npz", geometryFlag=paintedOpenings, 
-                        dx=np.array([DX]).astype(np.double, copy=False),
-                        openingIndex=np.array(openingIndex).astype(np.short, copy=False), 
-                        openingRadius=np.array(openingRadius).astype(np.double, copy=False), 
-                        openingNormalizedQRatio=np.array(openingNormalizedQratio).astype(np.double, copy=False), 
-                        openingCenter=np.array(openingCenter).astype(np.double, copy=False), 
-                        openingNormal=np.array(openingNormal).astype(np.double, copy=False), 
-                        stent=voxel_stent_final.astype(np.short, copy=False))
+    # np.savez_compressed uses force_zip64=True in numpy >= 2.0, producing
+    # ZIP64 headers that the C++ cnpy library cannot read. Write manually
+    # with allowZip64=False to ensure compatibility.
+    npz_path = outputBaseName + "c.npz"
+    arrays = {
+        "geometryFlag": paintedOpenings,
+        "dx": np.array([DX]).astype(np.double, copy=False),
+        "openingIndex": np.array(openingIndex).astype(np.short, copy=False),
+        "openingRadius": np.array(openingRadius).astype(np.double, copy=False),
+        "openingNormalizedQRatio": np.array(openingNormalizedQratio).astype(np.double, copy=False),
+        "openingCenter": np.array(openingCenter).astype(np.double, copy=False),
+        "openingNormal": np.array(openingNormal).astype(np.double, copy=False),
+        "stent": voxel_stent_final.astype(np.short, copy=False),
+    }
+    with zipfile.ZipFile(npz_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=False) as zf:
+        for name, arr in arrays.items():
+            buf = io.BytesIO()
+            np.save(buf, arr)
+            zf.writestr(name + ".npy", buf.getvalue())
 
     endTime = time.time()
     timeElapsed = int(round((endTime - startTime)))
