@@ -108,13 +108,16 @@ def calculateScaleAndShift(mesh, targetElements):
     bounding_box = [mins, maxs]
     ds3 = ds[0]*ds[1]*ds[2]
     vox_scale = (targetElements / ds3 ) ** (1. / 3)
-    #domain = map(int, [vox_scale * ds[0], vox_scale * ds[1], vox_scale * ds[2]]) 
-    domain = [int(x) for x in [vox_scale * ds[0], vox_scale * ds[1], vox_scale * ds[2]]] 
     shift = [-minimum for minimum in mins]
-    
-    #xyscale = (domain[0] - 1.0) / ds[0]
-    xyscale = domain[0] / ds[0]
-    scale = [xyscale, xyscale, xyscale] #TODO Something is fishy here, what is this xyscale???
+
+    # Pick xyscale first, then size the domain to bound the *scaled* mesh.
+    # Otherwise domain[0] = int(vox_scale*ds[0]) makes xyscale = domain[0]/ds[0]
+    # slightly smaller than vox_scale, but xyscale*ds[i] for i>0 can exceed
+    # int(vox_scale*ds[i]), leaving wall crossings on the upper edge outside
+    # the pixel array (perimeter.py:34 false-alarm).
+    xyscale = int(vox_scale * ds[0]) / ds[0]
+    domain = [int(math.ceil(xyscale * d)) + 1 for d in ds]
+    scale = [xyscale, xyscale, xyscale]
 
     return (scale, shift, domain, bounding_box)
 
