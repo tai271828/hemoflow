@@ -6,19 +6,44 @@ import numpy as np
 import perimeter
 from util import manhattanDistance, removeDupsFromPointList
 
-# Sub-voxel offset applied to every slice plane in toIntersectingLines, so
-# the plane never lands exactly on a mesh vertex. Without it, a mesh whose
-# vertex rings happen to sit on integer-voxel Z values (e.g. an SDF sampled
-# at multiples of 1/scale) makes triangleToIntersectingLines return only
-# degenerate (point / zero-length) segments for that slice. linesToVoxels'
-# parity scanline then writes no True voxels for the entire slice, and
-# createFluidSolid.createWalls' dilation later fills the empty interior
-# with wall — producing a phantom wall slab through the lumen.
+# Default sub-voxel offset for slice planes that coincide with a mesh vertex.
+# A mesh whose vertex rings sit on integer-voxel Z values (e.g. an SDF sampled
+# at multiples of 1/scale, then meshed via marching cubes) makes
+# triangleToIntersectingLines return only degenerate (point / zero-length)
+# segments for the coincident slice. linesToVoxels' parity scanline then
+# writes no True voxels for the entire slice, and createFluidSolid.createWalls'
+# dilation later fills the empty interior with wall — a phantom wall slab
+# through the lumen.
+#
+# The offset is applied *only* on slices whose height matches a vertex Z (see
+# toIntersectingLines below), so meshes that don't trigger the bug rasterise
+# bit-identically to the pre-fix behaviour.
+#
+# TODO (future work, alternative E): replace this conditional epsilon with a
+# proper root-cause fix in triangleToIntersectingLines / perimeter.linesToVoxels
+# — handle vertex-coincident triangles correctly (dedupe ring edges in the
+# len(same)==2 branch; teach the parity scanline the "simulation of simplicity"
+# / glancing-vertex rule). That removes the epsilon entirely but will change
+# the byte-level output of existing meshes, so it needs a tolerance-based
+# regression suite first.
 _SLICE_EPSILON = 1e-4
 
 
-def toIntersectingLines(mesh, height):
-    height = height + _SLICE_EPSILON
+def collectVertexZs(mesh):
+    """Return the set of distinct Z coordinates over all vertices in mesh.
+
+    Used to decide per-slice whether toIntersectingLines needs to apply the
+    sub-voxel epsilon. Compute once on the scaled/shifted mesh and pass in.
+    """
+    return {pt[2] for tri in mesh for pt in tri}
+
+
+def toIntersectingLines(mesh, height, epsilon=_SLICE_EPSILON, vertex_zs=None):
+    # Only perturb the plane when it actually coincides with a mesh vertex Z.
+    # On healthy meshes vertex_zs never contains an integer height, so the call
+    # is a no-op vs. the pre-fix code path.
+    if epsilon and vertex_zs is not None and height in vertex_zs:
+        height = height + epsilon
     relevantTriangles = list(filter(lambda tri: isAboveAndBelow(tri, height), mesh))
     notSameTriangles = filter(lambda tri: not isIntersectingTriangle(tri, height), relevantTriangles)
     lines = list(map(lambda tri: triangleToIntersectingLines(tri, height), notSameTriangles))

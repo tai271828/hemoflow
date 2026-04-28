@@ -9,7 +9,8 @@ from util import padVoxelArray
 
 from stl import mesh
 
-def voxelize(inputFile, targetElements, isMeshAShell = False, domainData = None, rotation =-1):
+def voxelize(inputFile, targetElements, isMeshAShell = False, domainData = None, rotation =-1,
+             slice_vertex_epsilon=slice._SLICE_EPSILON):
     mesh = list(import_stl_file(inputFile))
 
     if domainData is None:
@@ -51,9 +52,15 @@ def voxelize(inputFile, targetElements, isMeshAShell = False, domainData = None,
     # d = return_dict
     
     ## Serial for debugging
+    # Precompute the set of vertex Z values once on the scaled/shifted mesh
+    # (and post-rotation if any), so render_slice can do an O(1) coincidence
+    # check per slice instead of rescanning the mesh.
+    vertex_zs = slice.collectVertexZs(mesh)
+
     d={}
     for height in range(int(domain[2])):
-        render_slice(mesh, height, domain, d, isMeshAShell)
+        render_slice(mesh, height, domain, d, isMeshAShell,
+                     slice_vertex_epsilon=slice_vertex_epsilon, vertex_zs=vertex_zs)
 
     for key, value in d.items():
         vol[key] = value
@@ -74,8 +81,11 @@ def voxelize(inputFile, targetElements, isMeshAShell = False, domainData = None,
 
     return (vol, (scale, shift, domain, bounding_box))
 
-def render_slice(mesh, height, domain, return_dict, isMeshAShell):
-    lines = slice.toIntersectingLines(mesh, height)
+def render_slice(mesh, height, domain, return_dict, isMeshAShell,
+                 slice_vertex_epsilon=slice._SLICE_EPSILON, vertex_zs=None):
+    lines = slice.toIntersectingLines(mesh, height,
+                                      epsilon=slice_vertex_epsilon,
+                                      vertex_zs=vertex_zs)
     prepixel = np.zeros((domain[0], domain[1]), dtype=bool)
     perimeter.linesToVoxels(lines, prepixel, isMeshAShell)
     return_dict[height] = prepixel

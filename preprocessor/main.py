@@ -7,6 +7,7 @@ from readCL import getOpeningsFromCenterline, convertToVoxelspace
 from voxelizeStl import voxelize
 from createFluidSolid import createWalls
 from detectOpenings import detectOpenings
+import slice as _slice_mod
 
 #############################
 # Parameters to check before execution:
@@ -96,12 +97,21 @@ if __name__ == "__main__":
 
     targetElem = int(confData["target_elements"])
 
+    # Optional: sub-voxel offset applied only to slice planes that coincide
+    # with a mesh vertex Z (see preprocessor/slice.py for the rationale and
+    # the future-work note on a proper root-cause fix). Defaults to the value
+    # baked into slice.py; set to 0 in the config to disable, or to a larger
+    # value if 1e-4 is still too small for your mesh's numerical scale.
+    slice_vertex_epsilon = float(confData.get("slice_vertex_epsilon",
+                                              _slice_mod._SLICE_EPSILON))
+
     voxel_stent_final = np.zeros(0)
 
     startTime = time.time()
 
     print("\n### Voxelizing vessel geometry ###")
-    voxelVol, domainData = voxelize(vesselGeomFile, targetElem)
+    voxelVol, domainData = voxelize(vesselGeomFile, targetElem,
+                                    slice_vertex_epsilon=slice_vertex_epsilon)
 
     if DEBUG_MODE:
         print("-> (DEBUG) Saving voxelization result")
@@ -187,13 +197,16 @@ if __name__ == "__main__":
     if haveStent:
         print("\n### Voxelizing flow diverter geometry from 3 projections ###")
         print("-> Voxelizing flow diverter geometry projection #1")
-        voxelStent, domainData_stent = voxelize(stentGeomFile, targetElem, True, domainData)
+        voxelStent, domainData_stent = voxelize(stentGeomFile, targetElem, True, domainData,
+                                                slice_vertex_epsilon=slice_vertex_epsilon)
 
         print("-> Voxelizing flow diverter geometry projection #2")
-        voxelStent2, domainData_stent = voxelize(stentGeomFile, targetElem, True, domainData, 0)
+        voxelStent2, domainData_stent = voxelize(stentGeomFile, targetElem, True, domainData, 0,
+                                                 slice_vertex_epsilon=slice_vertex_epsilon)
 
         print("-> Voxelizing flow diverter geometry projection #3")
-        voxelStent3, domainData_stent = voxelize(stentGeomFile, targetElem, True, domainData, 1)
+        voxelStent3, domainData_stent = voxelize(stentGeomFile, targetElem, True, domainData, 1,
+                                                 slice_vertex_epsilon=slice_vertex_epsilon)
 
         print("-> Merging projections")
         sdomain_full = np.logical_or(np.logical_or(voxelStent, voxelStent2), voxelStent3)
