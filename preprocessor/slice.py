@@ -6,7 +6,19 @@ import numpy as np
 import perimeter
 from util import manhattanDistance, removeDupsFromPointList
 
+# Sub-voxel offset applied to every slice plane in toIntersectingLines, so
+# the plane never lands exactly on a mesh vertex. Without it, a mesh whose
+# vertex rings happen to sit on integer-voxel Z values (e.g. an SDF sampled
+# at multiples of 1/scale) makes triangleToIntersectingLines return only
+# degenerate (point / zero-length) segments for that slice. linesToVoxels'
+# parity scanline then writes no True voxels for the entire slice, and
+# createFluidSolid.createWalls' dilation later fills the empty interior
+# with wall — producing a phantom wall slab through the lumen.
+_SLICE_EPSILON = 1e-4
+
+
 def toIntersectingLines(mesh, height):
+    height = height + _SLICE_EPSILON
     relevantTriangles = list(filter(lambda tri: isAboveAndBelow(tri, height), mesh))
     notSameTriangles = filter(lambda tri: not isIntersectingTriangle(tri, height), relevantTriangles)
     lines = list(map(lambda tri: triangleToIntersectingLines(tri, height), notSameTriangles))
