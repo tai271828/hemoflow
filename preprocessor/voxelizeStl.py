@@ -83,9 +83,19 @@ def voxelize(inputFile, targetElements, isMeshAShell = False, domainData = None,
 
 def render_slice(mesh, height, domain, return_dict, isMeshAShell,
                  slice_vertex_epsilon=slice._SLICE_EPSILON, vertex_zs=None):
+    # Never perturb the first or last Z-slice. For a closed vessel mesh those
+    # slices are the end caps: an empty (un-perturbed) cap is correctly painted
+    # as wall by createFluidSolid.createWalls, which is the desired semantics.
+    # Perturbing would trace the cap perimeter and fill the disc as fluid,
+    # opening the closed end of the domain. The phantom-wall bug we care about
+    # only affects *interior* slices, so excluding boundaries costs nothing.
+    if height == 0 or height == int(domain[2]) - 1:
+        effective_vertex_zs = None
+    else:
+        effective_vertex_zs = vertex_zs
     lines = slice.toIntersectingLines(mesh, height,
                                       epsilon=slice_vertex_epsilon,
-                                      vertex_zs=vertex_zs)
+                                      vertex_zs=effective_vertex_zs)
     prepixel = np.zeros((domain[0], domain[1]), dtype=bool)
     perimeter.linesToVoxels(lines, prepixel, isMeshAShell)
     return_dict[height] = prepixel
