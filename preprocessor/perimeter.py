@@ -21,6 +21,10 @@ def linesToVoxels(lineList, pixels, isShell):
             isBlack = False
             lines = list(findRelevantLines(lineList, x))
             targetYs = list(map(lambda line:int(generateY(line,x)),lines))
+
+            import __main__
+            if getattr(__main__, 'DEBUG_MODE', False) and targetYs and len(pixels[x]) <= max(targetYs):
+                print("-> (DEBUG) SANITY CHECK 1 FAILED: Voxel array Y-limit (%d) is too small to reach outer geometry wall (%d) at x=%s z=%s" % (len(pixels[x]), max(targetYs), x, lineList[0][0][2]))
             for y in range(len(pixels[x])):
                 if isBlack:
                     pixels[x][y] = True

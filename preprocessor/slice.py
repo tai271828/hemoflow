@@ -104,17 +104,22 @@ def calculateScaleAndShift(mesh, targetElements):
         mins[i] = min(allPoints, key=lambda tri: tri[i])[i]
         maxs[i] = max(allPoints, key=lambda tri: tri[i])[i]
         ds[i] = maxs[i] - mins[i]
-    
+
     bounding_box = [mins, maxs]
     ds3 = ds[0]*ds[1]*ds[2]
     vox_scale = (targetElements / ds3 ) ** (1. / 3)
-    #domain = map(int, [vox_scale * ds[0], vox_scale * ds[1], vox_scale * ds[2]]) 
-    domain = [int(x) for x in [vox_scale * ds[0], vox_scale * ds[1], vox_scale * ds[2]]] 
+    #domain = map(int, [vox_scale * ds[0], vox_scale * ds[1], vox_scale * ds[2]])
+    domain = [int(x) for x in [vox_scale * ds[0], vox_scale * ds[1], vox_scale * ds[2]]]
     shift = [-minimum for minimum in mins]
-    
+
     #xyscale = (domain[0] - 1.0) / ds[0]
     xyscale = domain[0] / ds[0]
     scale = [xyscale, xyscale, xyscale] #TODO Something is fishy here, what is this xyscale???
+
+    true_scaled_bound_y = scale[1] * ds[1]
+    import __main__
+    if getattr(__main__, 'DEBUG_MODE', False) and domain[1] < true_scaled_bound_y:
+        print("-> (DEBUG) SANITY CHECK 2 FAILED: Truncated domain[1] (%d) is strictly less than scaled floating-point boundary (%f)" % (domain[1], true_scaled_bound_y))
 
     return (scale, shift, domain, bounding_box)
 
