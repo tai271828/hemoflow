@@ -40,11 +40,15 @@ def linesToVoxels(lineList, pixels, isShell):
                 # This can make the following isBlack check not closed.
                 if scanline_exit_wall >= len(pixels[x]):
                     print(
-                        f"-> (DEBUG) SANITY CHECK FAILED: "
-                        f"The last voxel index along Y-axis of {x}-th voxel along X-axis in the voxel domain is {len(pixels[x]) - 1}-th (total {len(pixels[x])} pixels).\n"
-                        f"However, the last voxel index of the voxel array of the scanline along Y-axis at x={x} z={lineList[0][0][2]} (xy-plane) is: {scanline_exit_wall})\n"
-                        f"with value {scanline_exit_wall_value}."
+                        f"-> (DEBUG) SANITY CHECK FAILED:\n"
+                        f"Domain total: {len(pixels[x])}, Expected: {scanline_exit_wall + 1} for {scanline_exit_wall_value}.\n\n"
+                        f"The last voxel index along Y-axis of \n"
+                        f"{x}-th voxel along X-axis in the voxel domain is {len(pixels[x]) - 1}-th (total {len(pixels[x])} pixels).\n"
+                        f"However, the last voxel index of the voxel array of the scanline along Y-axis at x={x} z={lineList[0][0][2]} (xy-plane) is: {scanline_exit_wall}\n"
+                        f"with value {scanline_exit_wall_value}.\n"
+                        f"Total voxel number of the scanline should be {scanline_exit_wall} rather than {len(pixels[x])}."
                     )
+
 
             for y in range(len(pixels[x])):
                 if isBlack:
