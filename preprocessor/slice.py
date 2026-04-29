@@ -116,16 +116,18 @@ def calculateScaleAndShift(mesh, targetElements):
     xyscale = domain[0] / ds[0]
     scale = [xyscale, xyscale, xyscale] #TODO Something is fishy here, what is this xyscale???
 
-    true_scaled_bound_y = scale[1] * ds[1]
+    final_scaled_bound_y = scale[1] * ds[1]
     import sys
     if getattr(sys.modules.get('__main__'), 'DEBUG_MODE', False):
         LHS = (vox_scale*ds[1]) % 1
         RHS = ds[1]/ds[0]*((vox_scale*ds[0]) % 1)
-        print(f"-> (DEBUG) Inequality: LHS {LHS} vs. RHS {RHS}. ds[1]: {ds[1]} vs. ds[0]: {ds[0]}")
+        print(f"-> (DEBUG) Inequality: LHS {LHS} vs. RHS {RHS}")
+        print(f"-> (DEBUG) ds[1]: {ds[1]} vs. ds[0]: {ds[0]}")
+        print(f"-> (DEBUG) Final scaled bound y: {final_scaled_bound_y} vs. domain[1]: {domain[1]}")
         if LHS > RHS:
             print(f"-> (DEBUG) Truncation bug detected: LHS {LHS} is larger than RHS {RHS}. It means potential truncation bug!!")
-        if domain[1] < true_scaled_bound_y:
-            print(f"-> (DEBUG) Truncated domain[1] ({domain[1]}) < floating-point boundary ({true_scaled_bound_y})")
+        if final_scaled_bound_y > domain[1]:
+            print(f"-> (DEBUG) Final scaled bound y: {final_scaled_bound_y} is larger than truncated domain[1] ({domain[1]})")
 
     return (scale, shift, domain, bounding_box)
 

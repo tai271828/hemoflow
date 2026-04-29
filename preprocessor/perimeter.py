@@ -40,7 +40,8 @@ def linesToVoxels(lineList, pixels, isShell):
                 # This can make the following isBlack check not closed.
                 if scanline_exit_wall >= len(pixels[x]):
                     print(
-                        f"-> (DEBUG) SANITY CHECK FAILED: The ({len(pixels[x])}) "
+                        f"-> (DEBUG) SANITY CHECK FAILED: "
+                        f"The ({len(pixels[x])}) "
                         f"Voxel array Y-limit is too small to reach outer geometry wall "
                         f"({scanline_exit_wall}) at x={x} z={lineList[0][0][2]} "
                         f"with value {scanline_exit_wall_value}."
