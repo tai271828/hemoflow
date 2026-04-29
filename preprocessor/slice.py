@@ -123,6 +123,7 @@ def calculateScaleAndShift(mesh, targetElements):
         RHS = ds[1]/ds[0]*((vox_scale*ds[0]) % 1)
         print(f"-> (DEBUG) Inequality: LHS {LHS} vs. RHS {RHS}")
         print(f"-> (DEBUG) ds[1]: {ds[1]} vs. ds[0]: {ds[0]}")
+        print(f"-> (DEBUG) vox_scale: {vox_scale} vs. xyscale {xyscale}")
         print(f"-> (DEBUG) Final scaled bound y: {final_scaled_bound_y} vs. domain[1]: {domain[1]}")
         if LHS > RHS:
             print(f"-> (DEBUG) Truncation bug detected: LHS {LHS} is larger than RHS {RHS}. It means potential truncation bug!!")
