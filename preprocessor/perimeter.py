@@ -22,9 +22,30 @@ def linesToVoxels(lineList, pixels, isShell):
             lines = list(findRelevantLines(lineList, x))
             targetYs = list(map(lambda line:int(generateY(line,x)),lines))
 
-            import __main__
-            if getattr(__main__, 'DEBUG_MODE', False) and targetYs and len(pixels[x]) <= max(targetYs):
-                print("-> (DEBUG) SANITY CHECK 1 FAILED: Voxel array Y-limit (%d) is too small to reach outer geometry wall (%d) at x=%s z=%s" % (len(pixels[x]), max(targetYs), x, lineList[0][0][2]))
+            # SANITY CHECK: Execute BEFORE the loop to ensure we catch bounds errors
+            import sys
+            if getattr(sys.modules.get('__main__'), 'DEBUG_MODE', False) and targetYs:
+                scanline_exit_wall = max(targetYs)
+                scanline_exit_wall_value = max(max(line[0][1], line[1][1]) for line in lines)
+                # The equal sign means the max scanline pixel index number would be larger than the max input domain pixel index number
+                # since the pixel index starts at 0, the maximum pixel index is len(pixels[x]) - 1
+                #
+                # This sanity checks:
+                # 1) if the generated scanline pixel number is more than the input domain pixel number
+                # 2) if it is more, check max Y value of the generated scanlines ("scaneline_exit_wall_value").
+                #
+                # If scaneline_exit_wall_value is larger than len(pixels[x]),
+                # then it is a clear sign that the input domain pixel number is too small to reach the outer wall of the geometry,
+                # which means the geometry will be cut off and not fully captured in the voxelization.
+                # This can make the following isBlack check not closed.
+                if scanline_exit_wall >= len(pixels[x]):
+                    print(
+                        f"-> (DEBUG) SANITY CHECK FAILED: The ({len(pixels[x])}) "
+                        f"Voxel array Y-limit is too small to reach outer geometry wall "
+                        f"({scanline_exit_wall}) at x={x} z={lineList[0][0][2]} "
+                        f"with value {scanline_exit_wall_value}."
+                    )
+
             for y in range(len(pixels[x])):
                 if isBlack:
                     pixels[x][y] = True

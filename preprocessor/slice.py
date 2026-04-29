@@ -117,9 +117,9 @@ def calculateScaleAndShift(mesh, targetElements):
     scale = [xyscale, xyscale, xyscale] #TODO Something is fishy here, what is this xyscale???
 
     true_scaled_bound_y = scale[1] * ds[1]
-    import __main__
-    if getattr(__main__, 'DEBUG_MODE', False) and domain[1] < true_scaled_bound_y:
-        print("-> (DEBUG) SANITY CHECK 2 FAILED: Truncated domain[1] (%d) is strictly less than scaled floating-point boundary (%f)" % (domain[1], true_scaled_bound_y))
+    import sys
+    if getattr(sys.modules.get('__main__'), 'DEBUG_MODE', False) and domain[1] < true_scaled_bound_y:
+        print(f"-> (DEBUG) Truncated domain[1] ({domain[1]}) < floating-point boundary ({true_scaled_bound_y})")
 
     return (scale, shift, domain, bounding_box)
 
