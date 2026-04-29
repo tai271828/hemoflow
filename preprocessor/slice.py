@@ -116,20 +116,22 @@ def calculateScaleAndShift(mesh, targetElements):
     xyscale = domain[0] / ds[0]
     scale = [xyscale, xyscale, xyscale] #TODO Something is fishy here, what is this xyscale???
 
+    LHS = (vox_scale*ds[1]) % 1
+    RHS = ds[1]/ds[0]*((vox_scale*ds[0]) % 1)
+    if LHS > RHS:
+        print(f"-> (DEBUG) Truncation bug detected: LHS {LHS} is larger than RHS {RHS}. It means potential truncation bug!!")
+        print("Applying fix by adding 1 to the domain[1]")
+        domain[1] += 1
+        print(f"-> (DEBUG) After fix, domain[1] is updated to {domain[1]}")
+
     final_scaled_bound_y = scale[1] * ds[1]
     import sys
     if getattr(sys.modules.get('__main__'), 'DEBUG_MODE', False):
-        LHS = (vox_scale*ds[1]) % 1
-        RHS = ds[1]/ds[0]*((vox_scale*ds[0]) % 1)
         print(f"-> (DEBUG) Inequality: LHS {LHS} vs. RHS {RHS}")
         print(f"-> (DEBUG) ds[1]: {ds[1]} vs. ds[0]: {ds[0]}")
         print(f"-> (DEBUG) vox_scale: {vox_scale} vs. xyscale {xyscale}")
         print(f"-> (DEBUG) Final scaled bound y: {final_scaled_bound_y} vs. domain[1]: {domain[1]}")
-        if LHS > RHS:
-            print(f"-> (DEBUG) Truncation bug detected: LHS {LHS} is larger than RHS {RHS}. It means potential truncation bug!!")
-            print("Applying fix by adding 1 to the domain[1]")
-            domain[1] += 1
-            print(f"-> (DEBUG) After fix, domain[1] is updated to {domain[1]}")
+
         if final_scaled_bound_y > domain[1]:
             print(f"-> (DEBUG) Final scaled bound y: {final_scaled_bound_y} is larger than truncated domain[1] ({domain[1]})")
 
