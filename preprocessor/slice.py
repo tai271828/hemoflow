@@ -118,8 +118,14 @@ def calculateScaleAndShift(mesh, targetElements):
 
     true_scaled_bound_y = scale[1] * ds[1]
     import sys
-    if getattr(sys.modules.get('__main__'), 'DEBUG_MODE', False) and domain[1] < true_scaled_bound_y:
-        print(f"-> (DEBUG) Truncated domain[1] ({domain[1]}) < floating-point boundary ({true_scaled_bound_y})")
+    if getattr(sys.modules.get('__main__'), 'DEBUG_MODE', False):
+        LHS = (vox_scale*ds[1]) % 1
+        RHS = ds[1]/ds[0]*((vox_scale*ds[0]) % 1)
+        print(f"-> (DEBUG) Inequality: LHS {LHS} vs. RHS {RHS}. ds[1]: {ds[1]} vs. ds[0]: {ds[0]}")
+        if LHS > RHS:
+            print(f"-> (DEBUG) Truncation bug detected: LHS {LHS} is larger than RHS {RHS}. It means potential truncation bug!!")
+        if domain[1] < true_scaled_bound_y:
+            print(f"-> (DEBUG) Truncated domain[1] ({domain[1]}) < floating-point boundary ({true_scaled_bound_y})")
 
     return (scale, shift, domain, bounding_box)
 
