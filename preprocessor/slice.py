@@ -127,6 +127,9 @@ def calculateScaleAndShift(mesh, targetElements):
         print(f"-> (DEBUG) Final scaled bound y: {final_scaled_bound_y} vs. domain[1]: {domain[1]}")
         if LHS > RHS:
             print(f"-> (DEBUG) Truncation bug detected: LHS {LHS} is larger than RHS {RHS}. It means potential truncation bug!!")
+            print("Applying fix by adding 1 to the domain[1]")
+            domain[1] += 1
+            print(f"-> (DEBUG) After fix, domain[1] is updated to {domain[1]}")
         if final_scaled_bound_y > domain[1]:
             print(f"-> (DEBUG) Final scaled bound y: {final_scaled_bound_y} is larger than truncated domain[1] ({domain[1]})")
 
