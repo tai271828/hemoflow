@@ -41,9 +41,8 @@ def linesToVoxels(lineList, pixels, isShell):
                 if scanline_exit_wall >= len(pixels[x]):
                     print(
                         f"-> (DEBUG) SANITY CHECK FAILED: "
-                        f"The ({len(pixels[x])}) "
-                        f"Voxel array Y-limit is too small to reach outer geometry wall "
-                        f"({scanline_exit_wall}) at x={x} z={lineList[0][0][2]} "
+                        f"The last voxel index along Y-axis of {x}-th voxel along X-axis in the voxel domain is {len(pixels[x]) - 1}-th (total {len(pixels[x])} pixels).\n"
+                        f"However, the last voxel index of the voxel array of the scanline along Y-axis at x={x} z={lineList[0][0][2]} (xy-plane) is: {scanline_exit_wall})\n"
                         f"with value {scanline_exit_wall_value}."
                     )
 
