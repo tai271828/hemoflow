@@ -3,6 +3,11 @@ from collections import defaultdict
 import numpy as np
 
 def linesToVoxels(lineList, pixels, isShell):
+    import sys
+    if getattr(sys.modules.get('__main__'), 'DEBUG_MODE', False):
+        for line_y_per_x_no, line_y_per_x in enumerate(lineList):
+            print(f"-> (DEBUG) line on xy-plane: ")
+            print(f"no-ID={line_y_per_x_no} z={lineList[0][0][2]} no-of-lines={len(line_y_per_x)} line={line_y_per_x}")
     if isShell:
         for x in range(len(pixels)):
             #isBlack = False
@@ -23,7 +28,6 @@ def linesToVoxels(lineList, pixels, isShell):
             targetYs = list(map(lambda line:int(generateY(line,x)),lines))
 
             # SANITY CHECK: Execute BEFORE the loop to ensure we catch bounds errors
-            import sys
             if getattr(sys.modules.get('__main__'), 'DEBUG_MODE', False) and targetYs:
                 scanline_exit_wall = max(targetYs)
                 scanline_exit_wall_value = max(max(line[0][1], line[1][1]) for line in lines)
