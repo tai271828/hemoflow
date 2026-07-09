@@ -1,0 +1,12 @@
+{
+"_comment": "Voxelization for the straight-tube verification case (quick variant).",
+"geometry_original_stl": "input/straight_tube_Srf.stl",
+"centerline_vtp": "input/straight_tube_Ctl.vtp",
+"stent_mesh_base": "",
+"target_elements": "200000",
+"target_dx": "",
+"output_base_name": "input/vox_quick_",
+"cutWidth": "1",
+"distance": "4",
+"rotation": {"enabled": false}
+}

@@ -1,0 +1,29 @@
+
+    <simulation>
+        <dt>6e-5</dt>	<!-- Time step [s] -->
+        <blockSize>50</blockSize>
+        <outputDir>output_quick_murray</outputDir>
+        <simLength>0.8</simLength> <!-- [s] -->
+        <saveFrequency>0.1</saveFrequency> <!-- [s] -->
+        <mode>aneurysm</mode>
+        <!-- Aneurysm mode (hemoFlow.cpp): openings ordered by radius descending;
+             opening 0 -> velocity inlet, last (smallest) -> pressure outlet,
+             the rest -> Murray outlets. For this geometry: inlet = parent,
+             daughter1 (D=3.2) = Murray, daughter2 (D=2.6) = pressure. -->
+    </simulation>
+
+    <geometry>
+        <file>input/vox_quick_c.npz</file>
+        <opening_0>
+            <name>Inlet</name>
+            <type>1</type>
+            <label>10</label>
+            <timeScaleFunction>input/stationary.txt</timeScaleFunction>
+            <parameter>0.11</parameter> <!-- mean inlet velocity [m/s] -->
+        </opening_0>
+    </geometry>
+
+    <flowdiverter>
+        <linCoeff>0</linCoeff>
+        <quadCoeff>0</quadCoeff>
+    </flowdiverter>

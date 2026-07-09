@@ -1,0 +1,8 @@
+{
+  "quick/main": {
+    "steadiness": 0.0003091181570198387,
+    "mass_balance": -0.006524162221442444,
+    "side_flow_fraction": 0.07757765101215751,
+    "main_profile_l2_error": 0.07712167739171033
+  }
+}

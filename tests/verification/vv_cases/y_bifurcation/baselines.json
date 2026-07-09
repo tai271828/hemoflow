@@ -1,0 +1,18 @@
+{
+  "quick/murray": {
+    "steadiness": 0.000311297713778913,
+    "mass_balance": -0.011290140042114176,
+    "daughter1_flow_fraction": 0.6498934177253914,
+    "daughter2_flow_fraction": 0.35010658227460867,
+    "daughter1_profile_l2_error": 0.0787949652763862,
+    "daughter2_profile_l2_error": 0.13313746900292897
+  },
+  "quick/pressure": {
+    "steadiness": 0.00025389986694790423,
+    "mass_balance": -0.011276862725947596,
+    "daughter1_flow_fraction": 0.6527086875159017,
+    "daughter2_flow_fraction": 0.3472913124840983,
+    "daughter1_profile_l2_error": 0.08184235250115454,
+    "daughter2_profile_l2_error": 0.13216905535578832
+  }
+}

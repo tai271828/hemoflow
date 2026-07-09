@@ -1,0 +1,41 @@
+
+    <simulation>
+        <dt>2e-5</dt>	<!-- Time step [s] -->
+        <blockSize>50</blockSize>
+        <outputDir>output_full_pressure</outputDir>
+        <simLength>1.2</simLength> <!-- [s] -->
+        <saveFrequency>0.2</saveFrequency> <!-- [s] -->
+    </simulation>
+
+    <geometry>
+        <file>input/vox_full_c.npz</file>
+        <!-- Both daughters are pressure outlets at 0 Pa: the split follows the
+             branch resistances (resistance-network oracle). Labels 11/12 map to
+             the daughters; both get the same type so order does not matter. -->
+        <opening_0>
+            <name>Inlet</name>
+            <type>1</type>
+            <label>10</label>
+            <timeScaleFunction>input/stationary.txt</timeScaleFunction>
+            <parameter>0.11</parameter> <!-- mean inlet velocity [m/s] -->
+        </opening_0>
+        <opening_1>
+            <name>Daughter A</name>
+            <type>3</type>
+            <label>11</label>
+            <timeScaleFunction></timeScaleFunction>
+            <parameter>0</parameter> <!-- [Pa] -->
+        </opening_1>
+        <opening_2>
+            <name>Daughter B</name>
+            <type>3</type>
+            <label>12</label>
+            <timeScaleFunction></timeScaleFunction>
+            <parameter>0</parameter> <!-- [Pa] -->
+        </opening_2>
+    </geometry>
+
+    <flowdiverter>
+        <linCoeff>0</linCoeff>
+        <quadCoeff>0</quadCoeff>
+    </flowdiverter>

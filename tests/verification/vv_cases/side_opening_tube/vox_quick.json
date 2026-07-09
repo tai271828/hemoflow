@@ -1,0 +1,12 @@
+{
+"_comment": "Voxelization for the side-opening tube (T-junction) case (quick variant).",
+"geometry_original_stl": "input/side_opening_tube_Srf.stl",
+"centerline_vtp": "input/side_opening_tube_Ctl.vtp",
+"stent_mesh_base": "",
+"target_elements": "250000",
+"target_dx": "",
+"output_base_name": "input/vox_quick_",
+"cutWidth": "1",
+"distance": "4",
+"rotation": {"enabled": false}
+}

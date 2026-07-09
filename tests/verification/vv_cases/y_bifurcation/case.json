@@ -1,0 +1,22 @@
+{
+  "generator": "y_bifurcation",
+  "params": {"D_parent": 4.0, "L_parent": 12.0, "D_d1": 3.2, "D_d2": 2.6,
+             "angle_deg": 35.0, "L_arm": 8.0, "arc_radius": 6.0, "x_end": 30.0, "h": 0.1},
+  "flow": {"u_mean_inlet": 0.11},
+  "variants": {
+    "quick": {
+      "vox": "vox_quick.json",
+      "sims": {
+        "murray": {"xml": "sim_quick_murray.xml", "output_dir": "output_quick_murray"},
+        "pressure": {"xml": "sim_quick_pressure.xml", "output_dir": "output_quick_pressure"}
+      }
+    },
+    "full": {
+      "vox": "vox_full.json",
+      "sims": {
+        "murray": {"xml": "sim_full_murray.xml", "output_dir": "output_full_murray"},
+        "pressure": {"xml": "sim_full_pressure.xml", "output_dir": "output_full_pressure"}
+      }
+    }
+  }
+}

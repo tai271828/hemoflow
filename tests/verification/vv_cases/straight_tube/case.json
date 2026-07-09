@@ -1,0 +1,15 @@
+{
+  "generator": "straight_tube",
+  "params": {"D": 3.0, "L": 30.0, "h": 0.1},
+  "flow": {"u_mean_inlet": 0.11},
+  "variants": {
+    "quick": {
+      "vox": "vox_quick.json",
+      "sims": {"main": {"xml": "sim_quick.xml", "output_dir": "output_quick_main"}}
+    },
+    "full": {
+      "vox": "vox_full.json",
+      "sims": {"main": {"xml": "sim_full.xml", "output_dir": "output_full_main"}}
+    }
+  }
+}

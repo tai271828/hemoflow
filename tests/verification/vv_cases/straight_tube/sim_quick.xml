@@ -1,0 +1,32 @@
+
+    <simulation>
+        <dt>4e-5</dt>	<!-- Time step [s] -->
+        <blockSize>50</blockSize>
+        <outputDir>output_quick_main</outputDir>
+        <simLength>0.6</simLength> <!-- [s]; Poiseuille startup time constant is R^2/(5.78 nu) ~ 0.12 s -->
+        <saveFrequency>0.1</saveFrequency> <!-- [s] -->
+    </simulation>
+
+    <geometry>
+        <file>input/vox_quick_c.npz</file>
+        <!-- Opening types: 1 - Velocity; 2 - Murray (velocity); 3 - Pressure; 4 - Freeflow -->
+        <opening_0>
+            <name>Inlet</name>
+            <type>1</type>
+            <label>10</label>
+            <timeScaleFunction>input/stationary.txt</timeScaleFunction>
+            <parameter>0.11</parameter> <!-- mean inlet velocity [m/s], Re ~ 100 -->
+        </opening_0>
+        <opening_1>
+            <name>Outlet</name>
+            <type>3</type>
+            <label>11</label>
+            <timeScaleFunction></timeScaleFunction>
+            <parameter>0</parameter> <!-- [Pa] -->
+        </opening_1>
+    </geometry>
+
+    <flowdiverter>
+        <linCoeff>0</linCoeff>
+        <quadCoeff>0</quadCoeff>
+    </flowdiverter>
