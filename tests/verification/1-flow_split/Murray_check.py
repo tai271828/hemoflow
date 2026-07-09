@@ -38,12 +38,12 @@ def make_box(origin, normal, size):
     return [mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]]
 
 
-def main(path):
+def main(path, npz_file):
     timesteps = glob.glob(os.path.join(path,"output/**/*.vti"), recursive=True)
     timesteps=sorted(timesteps)
     time=0
-    
-    compFile = np.load('./input/vox_murray_5M_c.npz')
+
+    compFile = np.load(os.path.join(path, npz_file))
     dx=compFile['dx']
     openingCenter=compFile['openingCenter']
     openingRadius=compFile['openingRadius']
@@ -132,7 +132,10 @@ def main(path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("d", default="./", help="Path to directory", type=str)
+    parser.add_argument("--npz", default="input/vox_branch_5M_c.npz",
+                        help="Geometry npz produced by the voxelizer, relative to the case directory "
+                             "(matches output_base_name in input/input_branch_vox.config)", type=str)
 
     args = parser.parse_args()
 
-    main(path=os.path.abspath(args.d))
+    main(path=os.path.abspath(args.d), npz_file=args.npz)

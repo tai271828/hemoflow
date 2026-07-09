@@ -44,8 +44,15 @@ def getOpeningsFromCenterline(fileName):
     data = reader.GetOutput()
     points = data.GetPoints()
     pdata = data.GetPointData()
-    # TODO make configurable field to allow also MaximumInscribedSphereRadius
+    # Prefer "Radius", fall back to the VMTK default array name.
     rdata = pdata.GetArray("Radius")
+    if rdata is None:
+        rdata = pdata.GetArray("MaximumInscribedSphereRadius")
+    if rdata is None:
+        raise ValueError(
+            f"Centerline file {fileName} has neither a 'Radius' nor a "
+            "'MaximumInscribedSphereRadius' point data array."
+        )
 
     # Read the number of lines in the dataset
     nLines = data.GetNumberOfLines()

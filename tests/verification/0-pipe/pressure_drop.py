@@ -5,8 +5,10 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 
-rho_blood=1055
-nu_blood=3.33e-6
+# Blood properties; must match the solver (globals.h BLOOD_DENSITY,
+# hemoFlow.cpp nuInf).
+rho_blood = 1055
+nu_blood = 3.22e-6
 
 def mag(a: pv.pyvista_ndarray):
     "Returns the magnigude of an array of scalars/vectors."
@@ -21,26 +23,30 @@ def calculate_mean(slice):
 
 def poiseuille_1d(y, D=1.0, mu=1.0, dp=1.0, L=1.0):
     """
-    Analytical 1D Poiseuille velocity profile between parallel plates.
+    Analytical Poiseuille velocity profile of a circular pipe, sampled along a
+    diameter: with y measured from the wall (0 <= y <= D), y*(D-y) = R^2 - r^2,
+    so u = dp/(4 mu L) * (R^2 - r^2).
 
     Parameters
     ----------
     y : float or ndarray
-        Vertical coordinate(s), 0 <= y <= H.
-    H : float
-        Channel height.
+        Coordinate along the diameter, measured from the wall, 0 <= y <= D.
+    D : float
+        Pipe diameter.
     mu : float
         Dynamic viscosity.
-    G : float
-        Pressure gradient magnitude (dp/dx = -G).
+    dp : float
+        Pressure drop over the length L.
+    L : float
+        Length over which dp is measured.
 
     Returns
     -------
     u : float or ndarray
-        Velocity at position y.
+        Axial velocity at position y.
     """
-    G=dp/L
-    u=(G / (4.0 * mu)) * y * (D - y)
+    G = dp / L
+    u = (G / (4.0 * mu)) * y * (D - y)
     return u
 
 
@@ -65,13 +71,10 @@ def main(path):
     calculate_mean(outlet)
     pressure_drop = (inlet["mean_density"] - outlet["mean_density"])[0]
 
-    
-    rho_blood=1055
-    nu_blood=3.22e-6
     L_dp=x_bounds/2
     D_pipe=y_bounds
 
-    dp_Poiseuille=(8*nu_blood*rho_blood*L_dp*outlet['VFR'][0])/(3.14*(D_pipe/2)**4)
+    dp_Poiseuille=(8*nu_blood*rho_blood*L_dp*outlet['VFR'][0])/(np.pi*(D_pipe/2)**4)
     dp_diff=abs(dp_Poiseuille-pressure_drop)/dp_Poiseuille
 
     velocity_profile=threshold.sample_over_line(pointa=[3 / 4 * x_bounds,y_bounds/2,0],pointb=[3 / 4 * x_bounds,y_bounds/2,y_bounds])

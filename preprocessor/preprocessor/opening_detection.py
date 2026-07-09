@@ -119,8 +119,10 @@ def detect_inlets_outlets(data):
         if (voxel_is_not_yet_processed(x, y, z, inlets_outlets)):
             plane = get_neighbouring_unused_voxel_plane(x, y, z, data)
             inlet_outlet = find_inlet_outlet(x, y, z, data, plane)
-            # if(inlet_outlet is not None):
-            inlets_outlets.append(inlet_outlet)
+            # find_inlet_outlet returns None for degenerate (single-voxel)
+            # candidates, which occur on coarse grids; skip them.
+            if inlet_outlet is not None:
+                inlets_outlets.append(inlet_outlet)
 
     return (inlets_outlets, data)
 

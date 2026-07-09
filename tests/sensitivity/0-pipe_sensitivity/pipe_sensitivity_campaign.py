@@ -4,13 +4,15 @@ import argparse
 import os
 import time
 
-SOFTWARE_PATH = "/home/lsandor/00_software/hemoflow/"
+# Repository root; override with HEMOFLOW_ROOT when running from a copy.
+SOFTWARE_PATH = os.environ.get(
+    "HEMOFLOW_ROOT",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."),
+)
 SOFTWARE_PATH = os.path.abspath(SOFTWARE_PATH)
-# HEMOFLOW_PATH='/mnt/d/1_Github/VascuTreatCFD/hemoflowcfd/build/hemoflow'
 HEMOFLOW_PATH = os.path.join(SOFTWARE_PATH, "build", "hemoFlow")
-HEMOFLOW_PATH = os.path.abspath(HEMOFLOW_PATH)
-PREPRPOCESSOR_PATH = os.path.join(SOFTWARE_PATH, "preprocessor", "main.py")
-PREPRPOCESSOR_PATH = os.path.abspath(PREPRPOCESSOR_PATH)
+# Python of the preprocessor venv (see preprocessor/pyproject.toml)
+PREPROCESSOR_PYTHON = os.path.join(SOFTWARE_PATH, "preprocessor", ".venv", "bin", "python")
 # For LBMpost use the fix-vvuq branch
 TEMPLATE_DIR_PATH = "campaign_dir"
 TEMPLATE_DIR_PATH = os.path.abspath(TEMPLATE_DIR_PATH)
@@ -65,7 +67,7 @@ def run_sensitivity_study(client_param):
         uq.actions.Encode(encoder_vox),
         # Voxelization
         uq.actions.ExecuteLocal(
-            f"conda run --live-stream -n lbmpre python {PREPRPOCESSOR_PATH} ./input/input_pipe_vox.config"
+            f"{PREPROCESSOR_PYTHON} -m preprocessor ./input/input_pipe_vox.config"
         ),
         uq.actions.Encode(encoder),
         # Simulation

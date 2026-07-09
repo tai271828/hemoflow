@@ -20,11 +20,26 @@ make -j 4
 ```
 
 ## Voxelization
-The voxelization code runs on python, the environment can be set up using conda:
+The voxelization code runs on python, the environment can be set up using uv
+(the package definition is preprocessor/pyproject.toml):
 ```bash
-conda env create -f preprocessor/environment.yml
-conda activate lbmpre
+cd preprocessor
+uv venv --python 3.9 .venv
+VIRTUAL_ENV=$PWD/.venv uv pip install -e ".[dev,vv]"
 ```
+(the legacy conda environment `preprocessor/environment.yml` also still works.)
+
+## Testing
+The verification suite (analytical test cases, regression baselines and a
+grid-convergence study) lives in `tests/verification`; see
+`tests/verification/README.md`. Quick start:
+```bash
+PY=preprocessor/.venv/bin/python
+$PY -m pytest preprocessor/tests            # unit tests
+$PY -m pytest tests/verification -m preproc # voxelization integration tests
+$PY -m pytest tests/verification -m solver_quick  # end-to-end solver checks
+```
+Design rationale and V&V documentation: `doc/VV/`.
 ## Troubleshooting
 ### HDF5 problems on Ubuntu
 HighFive requires 1.13+ parallel HDF5 version which is not available from apt-get (yet).
@@ -69,7 +84,8 @@ to the flags
 - [X] Pass the angle of the openings based on centerline calculations (new ID / opening, every centerline goes from the inlet to an opening)
 - [X] Calculate proper axis aligned Pouseuille profile even if the boundary is not perpendicular.
 - [] Bump up preprocessor to python 3.12 and corresponding numpy.
-- [] Validate and verify
+- [X] Verify (analytical verification suite in tests/verification; see doc/VV)
+- [] Validate against experimental/clinical reference data (see doc/VV/vv_rationale.md §6)
 
 
 ## License: AGPL v3.0

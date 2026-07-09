@@ -99,6 +99,7 @@ void writeVTK(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pli
        vtkOut.writeData<float>(*field1, "field1");
 }
 
+#ifdef HDF5
 // TODO - too slow, optimize the arrays (MPI rank is now saved in every lattice?).
 // TODO - Optimize chunk size.
 // TODO - save as vectors and matrices instead of 3D scalar arrays (also modify xdmf) - https://github.com/BlueBrain/HighFive/blob/master/src/examples/create_dataset_double.cpp
@@ -402,6 +403,7 @@ void writeHDF5(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, const SimPar &sim, pl
     pcout << "Saving XDMF time: " << XDMFtime << " sec" << endl;
 
 }
+#endif // HDF5
 
 void writeNPZ(MultiBlockLattice3D<T,DESCRIPTOR>& lattice, plint iter)
 {

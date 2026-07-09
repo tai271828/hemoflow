@@ -146,7 +146,10 @@ and 3.22e-6 in another — see §2.3.)
 | D2 | All `voxelize.sh` scripts call `python .../preprocessor/main.py`, which was removed in the package refactor | e.g. `tests/verification/0-pipe/input/voxelize.sh`; entry point is now `python -m preprocessor` |
 | D3 | `pressure_drop.py` inconsistent viscosity (3.33e-6 vs 3.22e-6), literal `3.14` instead of `np.pi`, misleading docstring (formula is correct for a circular pipe along a diameter, docstring says parallel plates) | `tests/verification/0-pipe/pressure_drop.py:9,70,74,22-44` |
 | D4 | Sensitivity campaigns hard-code `/home/lsandor/00_software/hemoflow/` | `tests/sensitivity/*/**_campaign.py:7` |
-| D5 | No `Radius`-array fallback (`MaximumInscribedSphereRadius`) though marked TODO — VMTK-produced centerlines may fail | `preprocessor/preprocessor/centerline.py:47` |
+| D5 | No `Radius`-array fallback (`MaximumInscribedSphereRadius`) though marked TODO — **all reference centerlines in the repo use the VMTK name**, so they crash the current reader | `preprocessor/preprocessor/centerline.py:47` |
+| D6 | `io.cpp`/`io.h` use HighFive parallel-HDF5 symbols unconditionally; the build breaks with serial-only HDF5 even though CMake promises graceful degradation — guard with `#ifdef HDF5` | `io.cpp:200,203,241`, `io.h:13-17` (found in Phase 3) |
+| D7 | `slice.calculateScaleAndShift` divides by `targetElements` before checking `target_dx`; configs setting only `target_dx` crash | `preprocessor/preprocessor/slice.py:110` (found in Phase 4) |
+| D8 | `detect_inlets_outlets` appends the `None` returned for degenerate single-voxel opening candidates (the guard is commented out), crashing on coarse grids | `preprocessor/preprocessor/opening_detection.py:122` (found in Phase 4) |
 
 ---
 
@@ -160,7 +163,8 @@ tests/
 │   │   ├── geometry_gen.py         # parametric STL+VTP generators (Phase 1)
 │   │   ├── metrics.py              # VTI loading, slicing, flow rates, profiles
 │   │   └── oracles.py              # analytical formulas (§6.4)
-│   ├── cases/                      # NEW case definitions
+│   ├── vv_cases/                   # NEW case definitions (NOT "cases/" — that
+│   │   │                           #   name is matched by the repo .gitignore)
 │   │   ├── straight_tube/          # Case A
 │   │   ├── side_opening_tube/      # Case B
 │   │   └── y_bifurcation/          # Case C

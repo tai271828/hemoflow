@@ -48,6 +48,7 @@ cases/
 
 # Python related
 __pycache__/
+.venv/
 
 # Output files
 output/
@@ -79,3 +80,10 @@ AGENTS.md
 *.egg-info
 
 data-will-not-commit/
+
+# V&V generated geometry (regenerate with tests/verification/run_case.py)
+tests/verification/vv_cases/*/input/
+tests/verification/vv_cases/*/solve_*.log
+tests/verification/vv_cases/*/metrics_*.json
+tests/verification/vv_cases/*/vox_conv*.json
+tests/verification/vv_cases/*/sim_conv*.xml

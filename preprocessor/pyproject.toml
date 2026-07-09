@@ -21,6 +21,11 @@ dev = [
     "pytest>=7.0",
     "pytest-cov",
 ]
+# Verification & validation harness (tests/verification at the repo root)
+vv = [
+    "pyvista",
+    "matplotlib",
+]
 
 [project.scripts]
 preprocessor = "preprocessor.__main__:main"

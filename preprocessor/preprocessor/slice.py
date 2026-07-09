@@ -107,10 +107,13 @@ def calculateScaleAndShift(mesh, targetElements, target_dx):
 
     bounding_box = [mins, maxs]
     ds3 = ds[0]*ds[1]*ds[2]
-    vox_scale = (targetElements / ds3 ) ** (1. / 3)
 
-    if target_dx != None:
+    if target_dx is not None:
         vox_scale = 1 / target_dx  # (1 / target_dx) ** (1.0 / 3)
+    elif targetElements is not None:
+        vox_scale = (targetElements / ds3) ** (1. / 3)
+    else:
+        raise ValueError("Either target_dx or target_elements must be set")
 
     # domain = map(int, [vox_scale * ds[0], vox_scale * ds[1], vox_scale * ds[2]])
     domain = [int(x) for x in [vox_scale * ds[0], vox_scale * ds[1], vox_scale * ds[2]]]
